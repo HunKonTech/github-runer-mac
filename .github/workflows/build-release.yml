@@ -53,52 +53,84 @@ jobs:
 
       - id: macos_runner
         env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
+          RUNNER_DISCOVERY_TOKEN: ${{ secrets.RUNNER_DISCOVERY_TOKEN }}
+          DEFAULT_GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           RUNNER_JSON='"macos-latest"'
           RUNNER_NOTE="Using GitHub-hosted macOS runner (fallback)."
+          TOKEN_TO_USE="${RUNNER_DISCOVERY_TOKEN:-$DEFAULT_GITHUB_TOKEN}"
+          export GH_TOKEN="$TOKEN_TO_USE"
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
           RESPONSE_FILE="$(mktemp)"
           ERROR_FILE="$(mktemp)"
+          FOUND_MATCH=""
 
-          if gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/actions/runners" \
-            >"$RESPONSE_FILE" 2>"$ERROR_FILE"; then
-            MATCH="$(RUNNERS_JSON="$(cat "$RESPONSE_FILE")" python - <<'PY'
+          query_and_match() {
+            local endpoint="$1"
+
+            if gh api \
+              -H "Accept: application/vnd.github+json" \
+              "$endpoint" >"$RESPONSE_FILE" 2>"$ERROR_FILE"; then
+              MATCH="$(RUNNERS_JSON="$(cat "$RESPONSE_FILE")" python - <<'PY'
           import json
           import os
 
           data = json.loads(os.environ["RUNNERS_JSON"])
-          target = {"self-hosted", "macOS", "ARM64"}
+          target_labels = {"self-hosted", "macOS", "ARM64"}
+          target_name = "Koncsik-MacBook-Air"
 
           for runner in data.get("runners", []):
               labels = {label["name"] for label in runner.get("labels", [])}
               if (
-                  target.issubset(labels)
-                  and runner.get("status") == "online"
+                  runner.get("status") == "online"
                   and not runner.get("busy", False)
+                  and (
+                      runner.get("name") == target_name
+                      or target_labels.issubset(labels)
+                  )
               ):
                   print(json.dumps(["self-hosted", "macOS", "ARM64"]))
                   raise SystemExit(0)
 
           raise SystemExit(1)
           PY
-            )" || true
+              )" || true
 
-            if [ -n "$MATCH" ]; then
-              RUNNER_JSON="$MATCH"
-              RUNNER_NOTE="Using self-hosted macOS ARM64 runner."
+              if [ -n "$MATCH" ]; then
+                FOUND_MATCH="$MATCH"
+                return 0
+              fi
+
+              return 1
             fi
-          else
-            echo "Could not query self-hosted runners; falling back to macos-latest." >&2
-            cat "$ERROR_FILE" >&2
+
+            return 2
+          }
+
+          query_and_match "/repos/${OWNER}/${REPO}/actions/runners" || true
+
+          if [ -z "$FOUND_MATCH" ]; then
+            query_and_match "/orgs/${OWNER}/actions/runners" || true
+          fi
+
+          if [ -n "$FOUND_MATCH" ]; then
+            RUNNER_JSON="$FOUND_MATCH"
+            RUNNER_NOTE="Using self-hosted macOS ARM64 runner."
           fi
 
           echo "macos_runs_on=$RUNNER_JSON" >> "$GITHUB_OUTPUT"
           echo "macos_runner_note=$RUNNER_NOTE" >> "$GITHUB_OUTPUT"
           echo "$RUNNER_NOTE"
+
+          if [ -z "$FOUND_MATCH" ]; then
+            echo "No eligible self-hosted macOS ARM64 runner was discoverable. Falling back to macos-latest." >&2
+            if [ -s "$ERROR_FILE" ]; then
+              cat "$ERROR_FILE" >&2
+            fi
+            echo "Tip: set repository secret RUNNER_DISCOVERY_TOKEN with repo admin read access, or admin:org if the runner is org-level." >&2
+          fi
 
   build-macos:
     needs: prepare
