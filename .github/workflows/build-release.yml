@@ -33,16 +33,37 @@ jobs:
       - id: meta
         shell: bash
         run: |
-          BASE_VERSION="$(python - <<'PY'
+          git fetch --tags --force
+          export BASE_VERSION="$(python - <<'PY'
+          import os
+          import re
+          import subprocess
           import tomllib
+
           with open("pyproject.toml", "rb") as fh:
-              print(tomllib.load(fh)["project"]["version"])
+              configured = tomllib.load(fh)["project"]["version"]
+
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", configured)
+          if not match:
+              raise SystemExit(f"pyproject version must be semver x.y.z, got: {configured}")
+
+          major, minor, patch_floor = map(int, match.groups())
+          prefix = f"v{major}.{minor}."
+          tags = subprocess.check_output(["git", "tag", "--list", f"{prefix}*"], text=True).splitlines()
+
+          patch_numbers = []
+          for tag in tags:
+              tag_match = re.fullmatch(rf"v{major}\.{minor}\.(\d+)", tag.strip())
+              if tag_match:
+                  patch_numbers.append(int(tag_match.group(1)))
+
+          next_patch = patch_floor if not patch_numbers else max(max(patch_numbers) + 1, patch_floor)
+          print(f"{major}.{minor}.{next_patch}")
           PY
           )"
-          PACKAGE_VERSION="${BASE_VERSION}+build.${GITHUB_RUN_NUMBER}"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          TAG="main-build-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
-          RELEASE_NAME="Face-Local main build ${BASE_VERSION} (${SHORT_SHA})"
+          PACKAGE_VERSION="$BASE_VERSION"
+          TAG="v${PACKAGE_VERSION}"
+          RELEASE_NAME="Face-Local v${PACKAGE_VERSION}"
 
           {
             echo "base_version=$BASE_VERSION"

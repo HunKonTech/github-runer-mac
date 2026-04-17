@@ -62,7 +62,7 @@ def main() -> int:
             release_id=release["id"],
             name=args.name,
             notes=args.notes,
-            prerelease=True,
+            prerelease=False,
         )
         return 0
 
@@ -115,7 +115,7 @@ class GitHubReleaseClient:
             "name": name,
             "body": "",
             "draft": False,
-            "prerelease": True,
+            "prerelease": False,
         }
         try:
             return self._request_json(
