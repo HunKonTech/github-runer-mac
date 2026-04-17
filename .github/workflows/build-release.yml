@@ -135,12 +135,19 @@ jobs:
   build-macos:
     needs: prepare
     runs-on: ${{ fromJSON(needs.prepare.outputs.macos_runs_on) }}
+    env:
+      AGENT_TOOLSDIRECTORY: ${{ runner.temp }}/hostedtoolcache
+      RUNNER_TOOL_CACHE: ${{ runner.temp }}/hostedtoolcache
     steps:
       - uses: actions/checkout@v6
 
       - name: Selected macOS runner
         shell: bash
         run: echo "${{ needs.prepare.outputs.macos_runner_note }}"
+
+      - name: Prepare writable Python tool cache
+        shell: bash
+        run: mkdir -p "$AGENT_TOOLSDIRECTORY"
 
       - uses: actions/setup-python@v6
         with:
@@ -276,6 +283,15 @@ jobs:
           path: release/*
 
   release:
+    if: >-
+      ${{
+        always() &&
+        (
+          needs.build-macos.result == 'success' ||
+          needs.build-windows.result == 'success' ||
+          needs.build-linux.result == 'success'
+        )
+      }}
     needs:
       - prepare
       - build-macos
@@ -310,6 +326,9 @@ jobs:
           notes+="- Commit: ${GITHUB_SHA}"$'\n'
           notes+="- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"$'\n'
           notes+="- macOS runner: ${{ needs.prepare.outputs.macos_runner_note }}"$'\n'
+          notes+="- macOS build: ${{ needs.build-macos.result }}"$'\n'
+          notes+="- Windows build: ${{ needs.build-windows.result }}"$'\n'
+          notes+="- Linux build: ${{ needs.build-linux.result }}"$'\n'
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
