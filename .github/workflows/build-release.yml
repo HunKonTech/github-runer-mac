@@ -222,14 +222,18 @@ jobs:
             "release/Face-Local-macOS-installer-${{ needs.prepare.outputs.package_version }}.dmg"
           rm -rf release/dmg-root
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-macos
-          if-no-files-found: error
-          path: |
-            release/*.zip
-            release/*.dmg
+      - name: Upload macOS assets to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python scripts/github_release.py upload \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "${{ needs.prepare.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --name "${{ needs.prepare.outputs.release_name }}" \
+            "release/*.zip" \
+            "release/*.dmg"
 
   build-windows:
     needs: prepare
@@ -266,14 +270,18 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ needs.prepare.outputs.package_version }}" "scripts\build_windows_installer.iss"
           Compress-Archive -Path "dist\Face-Local\*" -DestinationPath "release\Face-Local-windows-portable-${{ needs.prepare.outputs.package_version }}.zip" -Force
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-windows
-          if-no-files-found: error
-          path: |
-            release/*.zip
-            release/*.exe
+      - name: Upload Windows assets to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python scripts/github_release.py upload \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "${{ needs.prepare.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --name "${{ needs.prepare.outputs.release_name }}" \
+            "release/*.zip" \
+            "release/*.exe"
 
   build-linux:
     needs: prepare
@@ -315,14 +323,18 @@ jobs:
           chmod +x scripts/build_linux_deb.sh
           scripts/build_linux_deb.sh "${{ needs.prepare.outputs.package_version }}"
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-linux
-          if-no-files-found: error
-          path: |
-            release/*.deb
-            release/*.tar.gz
+      - name: Upload Linux assets to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python scripts/github_release.py upload \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "${{ needs.prepare.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --name "${{ needs.prepare.outputs.release_name }}" \
+            "release/*.deb" \
+            "release/*.tar.gz"
 
   release:
     if: >-
@@ -342,28 +354,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          pattern: release-*
-          merge-multiple: true
-
-      - name: Publish GitHub release
+      - name: Update GitHub release notes
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_NAME: ${{ needs.prepare.outputs.release_name }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         shell: bash
         run: |
-          mapfile -t files < <(find release-assets -type f | sort)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release assets were produced." >&2
-            exit 1
-          fi
-
           notes=$'Automated cross-platform build from `main`.\n\n'
           notes+="- Commit: ${GITHUB_SHA}"$'\n'
           notes+="- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"$'\n'
@@ -371,13 +369,9 @@ jobs:
           notes+="- macOS build: ${{ needs.build-macos.result }}"$'\n'
           notes+="- Windows build: ${{ needs.build-windows.result }}"$'\n'
           notes+="- Linux build: ${{ needs.build-linux.result }}"$'\n'
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "${files[@]}" \
-              --target "$GITHUB_SHA" \
-              --title "$RELEASE_NAME" \
-              --notes "$notes" \
-              --prerelease
-          fi
+          python3 scripts/github_release.py update-notes \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --name "$RELEASE_NAME" \
+            --notes "$notes"
