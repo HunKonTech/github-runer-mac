@@ -220,13 +220,16 @@ jobs:
             -ov \
             -format UDZO \
             "release/Face-Local-macOS-installer-${{ needs.prepare.outputs.package_version }}.dmg"
+          rm -rf release/dmg-root
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-macos
           if-no-files-found: error
-          path: release/*
+          path: |
+            release/*.zip
+            release/*.dmg
 
   build-windows:
     needs: prepare
@@ -268,7 +271,9 @@ jobs:
         with:
           name: release-windows
           if-no-files-found: error
-          path: release/*
+          path: |
+            release/*.zip
+            release/*.exe
 
   build-linux:
     needs: prepare
@@ -315,7 +320,9 @@ jobs:
         with:
           name: release-linux
           if-no-files-found: error
-          path: release/*
+          path: |
+            release/*.deb
+            release/*.tar.gz
 
   release:
     if: >-
