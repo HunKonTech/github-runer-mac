@@ -33,14 +33,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       use_self_hosted: ${{ steps.pick.outputs.use_self_hosted }}
+      selected_runner_name: ${{ steps.pick.outputs.selected_runner_name }}
     steps:
-      - name: Check preferred self-hosted runner availability
+      - name: Check self-hosted runner availability
         id: pick
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.RUNNER_ADMIN_TOKEN }}
           script: |
-            const preferredRunnerName = "Koncsik-MacBook-Air";
             const { owner, repo } = context.repo;
             try {
               const response = await github.request(
@@ -48,22 +48,38 @@ jobs:
                 { owner, repo }
               );
 
-              const runner = response.data.runners.find(
-                (item) => item.name === preferredRunnerName
+              const runner = response.data.runners.find((item) => {
+                const labels = new Set((item.labels || []).map((label) => label.name));
+                return (
+                  item.status === "online" &&
+                  !item.busy &&
+                  labels.has("self-hosted") &&
+                  labels.has("macOS") &&
+                  labels.has("ARM64")
+                );
+              });
+
+              core.info(
+                `Repository-visible runners: ${response.data.runners
+                  .map((item) => `${item.name}[${item.status}, busy=${item.busy}]`)
+                  .join(", ")}`
               );
 
-              const isAvailable = Boolean(runner?.status === "online" && !runner?.busy);
-              core.info(
-                runner
-                  ? `Runner ${preferredRunnerName} status=${runner.status} busy=${runner.busy}`
-                  : `Runner ${preferredRunnerName} was not found for this repository`
-              );
-              core.setOutput("use_self_hosted", isAvailable ? "true" : "false");
+              if (runner) {
+                core.info(`Selected self-hosted runner ${runner.name}.`);
+                core.setOutput("use_self_hosted", "true");
+                core.setOutput("selected_runner_name", runner.name);
+              } else {
+                core.info("No online idle self-hosted macOS ARM64 runner is currently available for this repository.");
+                core.setOutput("use_self_hosted", "false");
+                core.setOutput("selected_runner_name", "");
+              }
             } catch (error) {
               core.warning(
                 `Could not inspect self-hosted runners (${error.status || "unknown"}). Falling back to GitHub-hosted macOS runner.`
               );
               core.setOutput("use_self_hosted", "false");
+              core.setOutput("selected_runner_name", "");
             }
 
   build-self-hosted:
