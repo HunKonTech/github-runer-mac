@@ -146,7 +146,10 @@ def render_post_text(
         "Figyelheted az állapotát, indíthatod/leállíthatod — mindezt Terminál nélkül."
     )
     english_short = "Manage your local GitHub Actions self-hosted runner from the macOS menu bar."
+    english_compact = "Manage your local GitHub Actions self-hosted runner from the macOS menu bar"
     hungarian_short = "A helyi GitHub Actions self-hosted runner kezelése a macOS menüsorból."
+    hungarian_compact = "A helyi GitHub runner kezelése a macOS menüsorból."
+    compact_hashtags = "#GitHubActions #macOS #automatization"
 
     if template:
         text = template.format(
@@ -169,6 +172,7 @@ def render_post_text(
         "\n\n".join([english_long, hungarian_long]),
         "\n\n".join([english_long, hungarian_long, download_line]),
         "\n\n".join([opening, english_long, hungarian_long, platform_line, download_line, hashtags]),
+        "\n\n".join([compact_opening, english_compact, hungarian_compact, compact_hashtags, download_line]),
         "\n\n".join([compact_opening, english_short, hungarian_short, download_line]),
         "\n\n".join([compact_opening, english_short, hungarian_short, release_url]),
         "\n\n".join([opening, english_short, hungarian_short]),
