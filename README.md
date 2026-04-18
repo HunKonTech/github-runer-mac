@@ -1,8 +1,8 @@
-# GitHub Runner Menu
+# github runer mac
 
 ## English
 
-GitHub Runner Menu is a small macOS menu bar app for controlling a local self-hosted GitHub Actions runner.
+github runer mac is a small macOS menu bar app for controlling a local self-hosted GitHub Actions runner.
 
 It watches the current network state and can automatically start or stop the runner depending on whether the connection is available and non-metered. It also shows whether the runner is running, waiting for jobs, or currently processing a workflow job.
 
@@ -82,7 +82,7 @@ The workflow only posts for manually triggered releases and skips prereleases. I
 1. Install and configure your self-hosted GitHub Actions runner.
 2. Make sure the runner folder contains the usual `run.sh` script.
 3. Build and launch the app.
-4. Open the menu bar item called `GitHub Runner`.
+4. Open the menu bar item called `github runer mac`.
 5. Use `Automatic mode` to let the app manage the runner based on network conditions.
 6. Use manual start or manual stop if you want to override the automatic logic.
 7. Enable launch at login if you want the app to start with macOS.
@@ -100,7 +100,7 @@ This project is licensed under the terms described in [LICENSE](LICENSE).
 
 ## Magyar
 
-A GitHub Runner Menu egy kis macOS menüsáv alkalmazás, amely egy helyi self-hosted GitHub Actions runner vezérlésére szolgál.
+A github runer mac egy kis macOS menüsáv alkalmazás, amely egy helyi self-hosted GitHub Actions runner vezérlésére szolgál.
 
 Figyeli az aktuális hálózati állapotot, és automatikusan el tudja indítani vagy le tudja állítani a runnert attól függően, hogy van-e internetkapcsolat, illetve hogy a kapcsolat forgalomkorlátos-e. A menüben azt is megmutatja, hogy a runner fut-e, várakozik-e feladatra, vagy éppen dolgozik-e egy workflow jobon.
 
@@ -180,7 +180,7 @@ A workflow csak a kézzel indított release-eknél posztol, prerelease esetén n
 1. Telepítsd és konfiguráld a self-hosted GitHub Actions runnert.
 2. Ellenőrizd, hogy a runner mappa tartalmazza a szokásos `run.sh` scriptet.
 3. Fordítsd le és indítsd el az alkalmazást.
-4. Nyisd meg a `GitHub Runner` menüsáv elemet.
+4. Nyisd meg a `github runer mac` menüsáv elemet.
 5. Az `Automatic mode` használatával az app a hálózati állapot alapján kezeli a runnert.
 6. A kézi indítás és kézi leállítás gombokkal felül tudod bírálni az automatikus működést.
 7. Ha szeretnéd, kapcsold be az automatikus indulást bejelentkezéskor.

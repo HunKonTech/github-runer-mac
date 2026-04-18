@@ -153,7 +153,7 @@ enum AppStrings {
     private static let activeLanguageFamily = languageFamily(for: matchedLanguageIdentifier)
 
     private static let english: Catalog = [
-        .appName: "GitHub Runner",
+        .appName: "github runer mac",
         .statusRunnerTitle: "Runner",
         .statusActivityTitle: "Activity",
         .statusNetworkTitle: "Network",
@@ -168,7 +168,7 @@ enum AppStrings {
         .buttonOpenRunnerDirectory: "Open runner folder",
         .buttonOpenUpdateWindow: "Check for updates",
         .buttonOpenAboutWindow: "About and links",
-        .aboutWindowTitle: "About GitHub Runner",
+        .aboutWindowTitle: "About github runer mac",
         .aboutDescription: "Created by Benedek Koncsik. Open the profile pages or the project repository directly from the menu.",
         .buttonOpenAuthorGitHub: "GitHub profile",
         .buttonOpenAuthorX: "X profile",
@@ -239,7 +239,7 @@ enum AppStrings {
     private static let catalogs: [String: Catalog] = [
         "en": english,
         "hu": [
-            .appName: "GitHub Runner",
+            .appName: "github runer mac",
             .statusRunnerTitle: "Runner",
             .statusActivityTitle: "Munka",
             .statusNetworkTitle: "Hálózat",
@@ -254,7 +254,7 @@ enum AppStrings {
             .buttonOpenRunnerDirectory: "Runner mappa megnyitása",
             .buttonOpenUpdateWindow: "Frissítések keresése",
             .buttonOpenAboutWindow: "Névjegy és linkek",
-            .aboutWindowTitle: "GitHub Runner névjegy",
+            .aboutWindowTitle: "github runer mac névjegy",
             .aboutDescription: "Készítette Benedek Koncsik. Innen közvetlenül megnyithatod a profiloldalakat és a projekt repositoryját.",
             .buttonOpenAuthorGitHub: "GitHub profil",
             .buttonOpenAuthorX: "X profil",
