@@ -14,6 +14,7 @@ from typing import Iterable, List, Mapping, Sequence, Tuple
 BUFFER_API_URL = "https://api.buffer.com"
 DEFAULT_CHANNEL_SERVICE = "twitter"
 DEFAULT_POST_MODE = "shareNow"
+DEFAULT_SCHEDULING_TYPE = "automatic"
 DEFAULT_USER_AGENT = "github-runer-mac-buffer-release/1.0"
 MAX_POST_LENGTH = 280
 
@@ -48,6 +49,14 @@ def resolve_post_mode(env: Mapping[str, str] | None = None) -> str:
     value = source.get("BUFFER_POST_MODE")
     if value is None or value.strip() == "":
         return DEFAULT_POST_MODE
+    return value.strip()
+
+
+def resolve_scheduling_type(env: Mapping[str, str] | None = None) -> str:
+    source = env if env is not None else os.environ
+    value = source.get("BUFFER_SCHEDULING_TYPE")
+    if value is None or value.strip() == "":
+        return DEFAULT_SCHEDULING_TYPE
     return value.strip()
 
 
@@ -338,6 +347,7 @@ def create_buffer_post(
     channel_id: str,
     text: str,
     mode: str,
+    scheduling_type: str,
 ) -> Mapping[str, object]:
     data = graphql_request(
         api_key,
@@ -360,6 +370,7 @@ def create_buffer_post(
             "input": {
                 "channelId": channel_id,
                 "text": text,
+                "schedulingType": scheduling_type,
                 "mode": mode,
                 "source": "github-actions",
             }
@@ -385,12 +396,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     template = (os.environ.get("BUFFER_POST_TEMPLATE") or "").strip() or None
     text = render_post_text(args.app_name, args.tag, args.release_url, succeeded, template=template)
     mode = resolve_post_mode()
+    scheduling_type = resolve_scheduling_type()
 
     if args.dry_run:
         print(
             json.dumps(
                 {
                     "mode": mode,
+                    "schedulingType": scheduling_type,
                     "text": text,
                     "platforms": succeeded,
                 },
@@ -418,6 +431,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         channel_id=str(channel["id"]),
         text=text,
         mode=mode,
+        scheduling_type=scheduling_type,
     )
 
     print(

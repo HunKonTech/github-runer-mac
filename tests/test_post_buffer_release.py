@@ -48,6 +48,10 @@ def test_empty_buffer_post_mode_falls_back_to_share_now():
     assert MODULE.resolve_post_mode({"BUFFER_POST_MODE": ""}) == "shareNow"
 
 
+def test_empty_buffer_scheduling_type_falls_back_to_automatic():
+    assert MODULE.resolve_scheduling_type({"BUFFER_SCHEDULING_TYPE": ""}) == "automatic"
+
+
 def test_resolve_channel_short_circuits_for_explicit_channel_id():
     selected = MODULE.resolve_channel(
         "token",
