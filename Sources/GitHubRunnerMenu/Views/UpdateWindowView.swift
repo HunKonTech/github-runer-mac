@@ -35,17 +35,24 @@ struct UpdateWindowView: View {
                     updater.installLatestUpdate()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!updater.canInstallUpdate || isBusy)
+                .disabled(isBusy)
 
                 Button(AppStrings.buttonOpenReleasePage) {
                     updater.openReleasePage()
                 }
                 .buttonStyle(.bordered)
-                .disabled(updater.latestRelease == nil)
+            }
+
+            if let instructions = updater.manualBuildInstructions {
+                Text(instructions)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.top, 4)
             }
         }
         .padding(24)
-        .frame(minWidth: 500, idealWidth: 540, minHeight: 250)
+        .frame(minWidth: 500, idealWidth: 540, minHeight: 340)
     }
 
     private var isBusy: Bool {

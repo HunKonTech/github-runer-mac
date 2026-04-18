@@ -17,7 +17,6 @@ final class AppUpdateService {
 
     struct ReleaseInfo: Equatable {
         let version: String
-        let downloadURL: URL
         let releasePageURL: URL
         let publishedAt: Date?
     }
@@ -31,6 +30,7 @@ final class AppUpdateService {
     var state: UpdateState = .idle
     var latestRelease: ReleaseInfo?
     var lastCheckedAt: Date?
+    var manualBuildInstructions: String?
 
     var installedVersion: String {
         let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -61,15 +61,12 @@ final class AppUpdateService {
     }
 
     var canInstallUpdate: Bool {
-        if case .updateAvailable = state {
-            return latestRelease != nil
-        }
-
-        return false
+        true
     }
 
     func checkForUpdates() {
         state = .checking
+        manualBuildInstructions = nil
 
         Task {
             do {
@@ -91,31 +88,34 @@ final class AppUpdateService {
     }
 
     func installLatestUpdate() {
-        guard let release = latestRelease else {
-            state = .failed(AppStrings.updateErrorNoRelease)
-            return
-        }
+        manualBuildInstructions = AppStrings.manualBuildInstructions(
+            repositoryURL: repositoryCloneURL,
+            projectDirectory: repository
+        )
 
-        state = .downloading
-
-        Task {
-            do {
-                let downloadedZip = try await downloadReleaseAsset(from: release.downloadURL)
-                state = .installing
-                try stageAndInstall(zipURL: downloadedZip)
-            } catch {
-                state = .failed(
-                    AppStrings.updateErrorDetails(error.localizedDescription)
-                )
-            }
-        }
+        // Automatic app bundle download and install are intentionally disabled.
+        // guard let release = latestRelease else {
+        //     state = .failed(AppStrings.updateErrorNoRelease)
+        //     return
+        // }
+        //
+        // state = .downloading
+        //
+        // Task {
+        //     do {
+        //         let downloadedZip = try await downloadReleaseAsset(from: release.downloadURL)
+        //         state = .installing
+        //         try stageAndInstall(zipURL: downloadedZip)
+        //     } catch {
+        //         state = .failed(
+        //             AppStrings.updateErrorDetails(error.localizedDescription)
+        //         )
+        //     }
+        // }
     }
 
     func openReleasePage() {
-        guard let url = latestRelease?.releasePageURL else {
-            return
-        }
-
+        let url = latestRelease?.releasePageURL ?? releasesPageURL
         NSWorkspace.shared.open(url)
     }
 
@@ -141,22 +141,34 @@ final class AppUpdateService {
 
         let decoded = try JSONDecoder.github.decode(GitHubReleaseResponse.self, from: data)
 
-        guard
-            let asset = decoded.assets.first(where: {
-                $0.isSupportedMacOSZipAsset
-            }),
-            let downloadURL = URL(string: asset.browserDownloadURL),
-            let releasePageURL = URL(string: decoded.htmlURL)
-        else {
-            throw UpdateError.missingAsset
+        guard let releasePageURL = URL(string: decoded.htmlURL) else {
+            throw UpdateError.invalidResponse
         }
+
+        // Automatic app bundle release assets are intentionally disabled.
+        // guard
+        //     let asset = decoded.assets.first(where: {
+        //         $0.isSupportedMacOSZipAsset
+        //     }),
+        //     let downloadURL = URL(string: asset.browserDownloadURL),
+        //     let releasePageURL = URL(string: decoded.htmlURL)
+        // else {
+        //     throw UpdateError.missingAsset
+        // }
 
         return ReleaseInfo(
             version: decoded.tagName.replacingOccurrences(of: "v", with: ""),
-            downloadURL: downloadURL,
             releasePageURL: releasePageURL,
             publishedAt: decoded.publishedAt
         )
+    }
+
+    private var repositoryCloneURL: String {
+        "https://github.com/\(owner)/\(repository).git"
+    }
+
+    private var releasesPageURL: URL {
+        URL(string: "https://github.com/\(owner)/\(repository)/releases")!
     }
 
     private func downloadReleaseAsset(from url: URL) async throws -> URL {

@@ -7,6 +7,7 @@ DISPLAY_NAME="github runer mac"
 BUNDLE_ID="com.koncsik.githubrunnermenu"
 MIN_SYSTEM_VERSION="14.0"
 APP_VERSION="${APP_VERSION:-0.1.0}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -61,6 +62,14 @@ cat >"$INFO_PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+
+codesign_args=(--force --deep --sign "$CODE_SIGN_IDENTITY")
+if [[ "$CODE_SIGN_IDENTITY" != "-" ]]; then
+  codesign_args+=(--options runtime --timestamp)
+fi
+
+/usr/bin/codesign "${codesign_args[@]}" "$APP_BUNDLE"
+/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"

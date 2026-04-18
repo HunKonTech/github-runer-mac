@@ -20,7 +20,7 @@ final class UpdateWindowController {
         window.title = AppStrings.updateWindowTitle
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.center()
-        window.setContentSize(NSSize(width: 540, height: 260))
+        window.setContentSize(NSSize(width: 540, height: 340))
         window.isReleasedWhenClosed = false
         window.level = .floating
 

@@ -30,6 +30,9 @@ private enum AppTextKey: String {
     case buttonCheckForUpdates
     case buttonInstallUpdate
     case buttonOpenReleasePage
+    case updateBuildInstructionsIntro
+    case updateBuildInstructionsBundleOnly
+    case updateBuildInstructionsBundleLocation
     case updateIdle
     case updateChecking
     case updateUpToDate
@@ -174,14 +177,17 @@ enum AppStrings {
         .buttonOpenAuthorX: "X profile",
         .buttonOpenRepository: "Project repository",
         .updateWindowTitle: "Software update",
-        .updateDescription: "Check the latest GitHub release and install it automatically when a newer version is available.",
+        .updateDescription: "Check the latest GitHub release. Automatic app bundle releases are disabled, so the app shows source build instructions instead.",
         .updateInstalledVersionTitle: "Installed version",
         .updateLatestVersionTitle: "Latest version",
         .updateStatusTitle: "Status",
         .updateUnknownVersion: "Not checked yet",
         .buttonCheckForUpdates: "Check now",
-        .buttonInstallUpdate: "Download and install",
+        .buttonInstallUpdate: "Show build instructions",
         .buttonOpenReleasePage: "Open release page",
+        .updateBuildInstructionsIntro: "Clone the repository and run:",
+        .updateBuildInstructionsBundleOnly: "To only create the app bundle:",
+        .updateBuildInstructionsBundleLocation: "The bundle will be available in dist/GitHubRunnerMenu.app.",
         .updateIdle: "Ready to check for updates.",
         .updateChecking: "Checking GitHub releases...",
         .updateUpToDate: "You already have the latest version.",
@@ -260,14 +266,17 @@ enum AppStrings {
             .buttonOpenAuthorX: "X profil",
             .buttonOpenRepository: "Projekt repository",
             .updateWindowTitle: "Szoftverfrissítés",
-            .updateDescription: "Ellenőrzi a legfrissebb GitHub release-t, és ha van újabb verzió, automatikusan letölti és telepíti.",
+            .updateDescription: "Ellenőrzi a legfrissebb GitHub release-t. Az automatikus alkalmazáscsomag kiadás ki van kapcsolva, ezért az app forrásból buildelési útmutatót jelenít meg.",
             .updateInstalledVersionTitle: "Telepített verzió",
             .updateLatestVersionTitle: "Legfrissebb verzió",
             .updateStatusTitle: "Állapot",
             .updateUnknownVersion: "Még nincs ellenőrizve",
             .buttonCheckForUpdates: "Ellenőrzés",
-            .buttonInstallUpdate: "Letöltés és telepítés",
+            .buttonInstallUpdate: "Build útmutató",
             .buttonOpenReleasePage: "Release oldal megnyitása",
+            .updateBuildInstructionsIntro: "Clonozd le a repositoryt, majd futtasd:",
+            .updateBuildInstructionsBundleOnly: "Ha csak az alkalmazás bundle kell:",
+            .updateBuildInstructionsBundleLocation: "Az elkészült bundle itt lesz: dist/GitHubRunnerMenu.app.",
             .updateIdle: "Készen áll a frissítések ellenőrzésére.",
             .updateChecking: "GitHub release-ek ellenőrzése...",
             .updateUpToDate: "Már a legfrissebb verzió van telepítve.",
@@ -1082,6 +1091,9 @@ enum AppStrings {
     static var buttonCheckForUpdates: String { value(.buttonCheckForUpdates) }
     static var buttonInstallUpdate: String { value(.buttonInstallUpdate) }
     static var buttonOpenReleasePage: String { value(.buttonOpenReleasePage) }
+    static var updateBuildInstructionsIntro: String { value(.updateBuildInstructionsIntro) }
+    static var updateBuildInstructionsBundleOnly: String { value(.updateBuildInstructionsBundleOnly) }
+    static var updateBuildInstructionsBundleLocation: String { value(.updateBuildInstructionsBundleLocation) }
     static var updateIdle: String { value(.updateIdle) }
     static var updateChecking: String { value(.updateChecking) }
     static var updateUpToDate: String { value(.updateUpToDate) }
@@ -1163,5 +1175,19 @@ enum AppStrings {
 
     static func updateErrorInstall(_ reason: String) -> String {
         "Could not install the update: \(reason)"
+    }
+
+    static func manualBuildInstructions(repositoryURL: String, projectDirectory: String) -> String {
+        [
+            updateBuildInstructionsIntro,
+            "git clone \(repositoryURL)",
+            "cd \(projectDirectory)",
+            "./script/build_and_run.sh run",
+            "",
+            updateBuildInstructionsBundleOnly,
+            "./script/build_and_run.sh --bundle",
+            "",
+            updateBuildInstructionsBundleLocation
+        ].joined(separator: "\n")
     }
 }
