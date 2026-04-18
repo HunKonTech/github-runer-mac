@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       use_self_hosted: ${{ steps.pick.outputs.use_self_hosted }}
+      runs_on: ${{ steps.pick.outputs.runs_on }}
       selected_runner_name: ${{ steps.pick.outputs.selected_runner_name }}
     steps:
       - name: Check self-hosted runner availability
@@ -68,10 +69,12 @@ jobs:
               if (runner) {
                 core.info(`Selected self-hosted runner ${runner.name}.`);
                 core.setOutput("use_self_hosted", "true");
+                core.setOutput("runs_on", JSON.stringify(["self-hosted", "macOS", "ARM64"]));
                 core.setOutput("selected_runner_name", runner.name);
               } else {
                 core.info("No online idle self-hosted macOS ARM64 runner is currently available for this repository.");
                 core.setOutput("use_self_hosted", "false");
+                core.setOutput("runs_on", JSON.stringify("macos-14"));
                 core.setOutput("selected_runner_name", "");
               }
             } catch (error) {
@@ -79,45 +82,28 @@ jobs:
                 `Could not inspect self-hosted runners (${error.status || "unknown"}). Falling back to GitHub-hosted macOS runner.`
               );
               core.setOutput("use_self_hosted", "false");
+              core.setOutput("runs_on", JSON.stringify("macos-14"));
               core.setOutput("selected_runner_name", "");
             }
 
-  build-self-hosted:
-    name: Build on Preferred Self-Hosted Runner
+  build:
+    name: Build App Bundle
     needs: select-runner
-    if: needs.select-runner.outputs.use_self_hosted == 'true'
-    runs-on:
-      - self-hosted
-      - macOS
-      - ARM64
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build app bundle
-        run: APP_VERSION=${{ env.BUILD_VERSION }} ./script/build_and_run.sh --bundle
-
-      - name: Archive app bundle
+      - name: Report selected runner
         run: |
-          ditto -c -k --sequesterRsrc --keepParent dist/GitHubRunnerMenu.app GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
-
-      - name: Upload release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-asset
-          path: GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
-          if-no-files-found: error
-
-  build-github-hosted:
-    name: Build on GitHub Hosted macOS
-    needs: select-runner
-    if: needs.select-runner.outputs.use_self_hosted != 'true'
-    runs-on: macos-14
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+          if [ "${{ needs.select-runner.outputs.use_self_hosted }}" = "true" ]; then
+            echo "Using self-hosted runner: ${{ needs.select-runner.outputs.selected_runner_name }}"
+          else
+            echo "Using GitHub-hosted fallback runner: macos-14"
+          fi
 
       - name: Select Xcode 16
+        if: needs.select-runner.outputs.use_self_hosted != 'true'
         run: |
           XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_16*.app' | sort -V | tail -n 1)"
           if [ -z "$XCODE_APP" ]; then
@@ -146,10 +132,8 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs:
-      - build-self-hosted
-      - build-github-hosted
-    if: github.event_name == 'workflow_dispatch' && always() && (needs['build-self-hosted'].result == 'success' || needs['build-github-hosted'].result == 'success')
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       release_url: ${{ steps.create_release.outputs.url }}
