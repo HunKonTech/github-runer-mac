@@ -3,7 +3,7 @@ import SwiftUI
 struct AboutWindowView: View {
     private let githubURL = URL(string: "https://github.com/BenKoncsik")!
     private let xURL = URL(string: "https://x.com/BenedekKoncsik")!
-    private let repositoryURL = URL(string: "https://github.com/BenKoncsik/github-runer-mac")!
+    private let repositoryURL = URL(string: "https://github.com/HuKonTech/github-runer-mac")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

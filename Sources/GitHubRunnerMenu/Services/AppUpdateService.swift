@@ -24,7 +24,7 @@ final class AppUpdateService {
 
     static let shared = AppUpdateService()
 
-    private let owner = "BenKoncsik"
+    private let owner = "HuKonTech"
     private let repository = "github-runer-mac"
     private let session = URLSession.shared
 

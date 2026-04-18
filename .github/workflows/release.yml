@@ -171,61 +171,32 @@ jobs:
           generate_release_notes: true
           files: release-assets/GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
 
-  post-to-x:
-    name: Post Release to X
-    needs: release
-    if: always() && github.event_name == 'push' && needs.release.result == 'success'
+  post-to-buffer:
+    name: post-to-buffer
+    needs:
+      - release
+    if: ${{ needs.release.result == 'success' && github.event_name == 'push' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     env:
-      X_API_KEY: ${{ secrets.X_API_KEY }}
-      X_API_SECRET: ${{ secrets.X_API_SECRET }}
-      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
-      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+      BUFFER_CHANNEL_ID: ${{ secrets.BUFFER_CHANNEL_ID }}
+      BUFFER_ORGANIZATION_ID: ${{ secrets.BUFFER_ORGANIZATION_ID }}
+      BUFFER_CHANNEL_NAME: ${{ secrets.BUFFER_CHANNEL_NAME }}
+      BUFFER_CHANNEL_SERVICE: ${{ secrets.BUFFER_CHANNEL_SERVICE }}
+      BUFFER_POST_MODE: ${{ secrets.BUFFER_POST_MODE }}
+      BUFFER_POST_TEMPLATE: ${{ secrets.BUFFER_POST_TEMPLATE }}
       RELEASE_URL: ${{ needs.release.outputs.release_url }}
       RELEASE_VERSION: ${{ format('dev-{0}', github.sha) }}
       RELEASE_NAME: ${{ format('GitHubRunnerMenu dev-{0}', github.sha) }}
     steps:
-      - name: Skip when X secrets are not configured
-        if: env.X_API_KEY == '' || env.X_API_SECRET == '' || env.X_ACCESS_TOKEN == '' || env.X_ACCESS_TOKEN_SECRET == ''
-        run: echo "X posting skipped because one or more X API secrets are missing."
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Post release announcement
-        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
+      - name: Post release announcement via Buffer
+        continue-on-error: true
         run: |
-          npm init -y >/dev/null 2>&1
-          npm install twitter-api-v2 >/dev/null 2>&1
-          node <<'EOF'
-          const { TwitterApi } = require("twitter-api-v2");
-
-          async function main() {
-            const client = new TwitterApi({
-              appKey: process.env.X_API_KEY,
-              appSecret: process.env.X_API_SECRET,
-              accessToken: process.env.X_ACCESS_TOKEN,
-              accessSecret: process.env.X_ACCESS_TOKEN_SECRET
-            });
-
-            const releaseUrl = process.env.RELEASE_URL;
-            const version = process.env.RELEASE_VERSION;
-            const releaseName = process.env.RELEASE_NAME;
-            const text = `${releaseName} is out now.\n\nmacOS download: ${releaseUrl}\n\n#macOS #GitHubActions`;
-
-            if (text.length > 280) {
-              throw new Error(`Tweet text is too long (${text.length} characters).`);
-            }
-
-            await client.v2.tweet(text);
-            console.log(`Posted release announcement for v${version} to X.`);
-          }
-
-          main().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          EOF
+          python3 scripts/post_buffer_release.py \
+            --app-name "GitHubRunnerMenu" \
+            --tag "v${{ env.BUILD_VERSION }}" \
+            --release-url "${{ needs.release.outputs.release_url }}" \
+            --platform "macOS=success"
