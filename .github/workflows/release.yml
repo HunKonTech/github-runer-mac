@@ -1,0 +1,230 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix (example: 1.0.0)"
+        required: true
+        type: string
+      release_name:
+        description: "Optional custom release title"
+        required: false
+        type: string
+      prerelease:
+        description: "Create this as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  BUILD_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || format('dev-{0}', github.sha) }}
+
+jobs:
+  select-runner:
+    name: Select Runner
+    runs-on: ubuntu-latest
+    outputs:
+      use_self_hosted: ${{ steps.pick.outputs.use_self_hosted }}
+      selected_runner_name: ${{ steps.pick.outputs.selected_runner_name }}
+    steps:
+      - name: Check self-hosted runner availability
+        id: pick
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            try {
+              const response = await github.request(
+                "GET /repos/{owner}/{repo}/actions/runners",
+                { owner, repo }
+              );
+
+              const runner = response.data.runners.find((item) => {
+                const labels = new Set((item.labels || []).map((label) => label.name));
+                return (
+                  item.status === "online" &&
+                  !item.busy &&
+                  labels.has("self-hosted") &&
+                  labels.has("macOS") &&
+                  labels.has("ARM64")
+                );
+              });
+
+              core.info(
+                `Repository-visible runners: ${response.data.runners
+                  .map((item) => `${item.name}[${item.status}, busy=${item.busy}]`)
+                  .join(", ")}`
+              );
+
+              if (runner) {
+                core.info(`Selected self-hosted runner ${runner.name}.`);
+                core.setOutput("use_self_hosted", "true");
+                core.setOutput("selected_runner_name", runner.name);
+              } else {
+                core.info("No online idle self-hosted macOS ARM64 runner is currently available for this repository.");
+                core.setOutput("use_self_hosted", "false");
+                core.setOutput("selected_runner_name", "");
+              }
+            } catch (error) {
+              core.warning(
+                `Could not inspect self-hosted runners (${error.status || "unknown"}). Falling back to GitHub-hosted macOS runner.`
+              );
+              core.setOutput("use_self_hosted", "false");
+              core.setOutput("selected_runner_name", "");
+            }
+
+  build-self-hosted:
+    name: Build on Preferred Self-Hosted Runner
+    needs: select-runner
+    if: needs.select-runner.outputs.use_self_hosted == 'true'
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build app bundle
+        run: APP_VERSION=${{ env.BUILD_VERSION }} ./script/build_and_run.sh --bundle
+
+      - name: Archive app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/GitHubRunnerMenu.app GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset
+          path: GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
+          if-no-files-found: error
+
+  build-github-hosted:
+    name: Build on GitHub Hosted macOS
+    needs: select-runner
+    if: needs.select-runner.outputs.use_self_hosted != 'true'
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_16*.app' | sort -V | tail -n 1)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "Xcode 16 is not available on this runner image." >&2
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      - name: Build app bundle
+        run: APP_VERSION=${{ env.BUILD_VERSION }} ./script/build_and_run.sh --bundle
+
+      - name: Archive app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/GitHubRunnerMenu.app GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset
+          path: GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - build-self-hosted
+      - build-github-hosted
+    if: github.event_name == 'workflow_dispatch' && always() && (needs['build-self-hosted'].result == 'success' || needs['build-github-hosted'].result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      release_url: ${{ steps.create_release.outputs.url }}
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset
+          path: release-assets
+
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: ${{ inputs.release_name != '' && inputs.release_name || format('GitHubRunnerMenu v{0}', inputs.version) }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          files: release-assets/GitHubRunnerMenu-${{ env.BUILD_VERSION }}-macOS-arm64.zip
+
+  post-to-x:
+    name: Post Release to X
+    needs: release
+    if: needs.release.result == 'success' && inputs.prerelease != true
+    runs-on: ubuntu-latest
+    env:
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      RELEASE_URL: ${{ needs.release.outputs.release_url }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_NAME: ${{ inputs.release_name != '' && inputs.release_name || format('GitHubRunnerMenu v{0}', inputs.version) }}
+    steps:
+      - name: Skip when X secrets are not configured
+        if: env.X_API_KEY == '' || env.X_API_SECRET == '' || env.X_ACCESS_TOKEN == '' || env.X_ACCESS_TOKEN_SECRET == ''
+        run: echo "X posting skipped because one or more X API secrets are missing."
+
+      - name: Set up Node.js
+        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Post release announcement
+        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install twitter-api-v2 >/dev/null 2>&1
+          node <<'EOF'
+          const { TwitterApi } = require("twitter-api-v2");
+
+          async function main() {
+            const client = new TwitterApi({
+              appKey: process.env.X_API_KEY,
+              appSecret: process.env.X_API_SECRET,
+              accessToken: process.env.X_ACCESS_TOKEN,
+              accessSecret: process.env.X_ACCESS_TOKEN_SECRET
+            });
+
+            const releaseUrl = process.env.RELEASE_URL;
+            const version = process.env.RELEASE_VERSION;
+            const releaseName = process.env.RELEASE_NAME;
+            const text = `${releaseName} is out now.\n\nmacOS download: ${releaseUrl}\n\n#macOS #GitHubActions`;
+
+            if (text.length > 280) {
+              throw new Error(`Tweet text is too long (${text.length} characters).`);
+            }
+
+            await client.v2.tweet(text);
+            console.log(`Posted release announcement for v${version} to X.`);
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          EOF

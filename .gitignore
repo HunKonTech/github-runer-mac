@@ -553,3 +553,7 @@ playground.xcworkspace
 .kospellcheck/style-profile.json
 .vscode
 data
+.build
+dist
+.DS_Store
+
