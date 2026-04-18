@@ -1,1 +1,0 @@
-"""Face detector package."""
