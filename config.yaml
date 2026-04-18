@@ -1,0 +1,28 @@
+detection:
+  confidence_threshold: 0.65
+  min_face_size: 50
+  coral_model_path: models/ssd_mobilenet_v2_face_quant_postprocess_edgetpu.tflite
+  cpu_model_path: models/res10_300x300_ssd_iter_140000.caffemodel
+embedding:
+  model_path: models/mobilefacenet.tflite
+  input_size:
+  - 112
+  - 112
+  embedding_dim: 192
+clustering:
+  epsilon: 0.4
+  min_samples: 2
+  metric: cosine
+storage:
+  db_path: /Users/koncsikbenedek/Downloads/faces_v2.db
+  crops_dir: data/crops
+scan:
+  image_extensions:
+  - .jpg
+  - .jpeg
+  - .png
+  - .webp
+  worker_threads: 2
+  thumbnail_size:
+  - 128
+  - 128
