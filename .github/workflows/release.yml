@@ -182,8 +182,8 @@ jobs:
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
       X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
       RELEASE_URL: ${{ needs.release.outputs.release_url }}
-      RELEASE_VERSION: ${{ env.BUILD_VERSION }}
-      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && (inputs.release_name != '' && inputs.release_name || format('GitHubRunnerMenu v{0}', inputs.version)) || format('GitHubRunnerMenu {0}', env.BUILD_VERSION) }}
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || format('dev-{0}', github.sha) }}
+      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && (inputs.release_name != '' && inputs.release_name || format('GitHubRunnerMenu v{0}', inputs.version)) || format('GitHubRunnerMenu dev-{0}', github.sha) }}
     steps:
       - name: Skip when X secrets are not configured
         if: env.X_API_KEY == '' || env.X_API_SECRET == '' || env.X_ACCESS_TOKEN == '' || env.X_ACCESS_TOKEN_SECRET == ''
