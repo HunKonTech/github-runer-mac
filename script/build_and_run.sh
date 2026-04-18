@@ -10,7 +10,7 @@ APP_VERSION="${APP_VERSION:-0.1.0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
+APP_BUNDLE="$DIST_DIR/$PRODUCT_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
@@ -25,7 +25,7 @@ BUILD_BINARY="$(swift build --package-path "$ROOT_DIR" --show-bin-path)/$PRODUCT
 /usr/bin/swift "$ROOT_DIR/script/generate_icon.swift" >/dev/null
 /usr/bin/iconutil -c icns "$ROOT_DIR/Assets/AppIcon.iconset" -o "$ICON_FILE"
 
-rm -rf "$APP_BUNDLE"
+rm -rf "$DIST_DIR"/*.app
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$ICON_FILE" "$APP_RESOURCES/AppIcon.icns"
