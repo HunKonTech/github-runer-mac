@@ -174,7 +174,7 @@ jobs:
   post-to-x:
     name: Post Release to X
     needs: release
-    if: needs.release.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.prerelease != true)
+    if: needs.release.result == 'success'
     runs-on: ubuntu-latest
     env:
       X_API_KEY: ${{ secrets.X_API_KEY }}
@@ -185,18 +185,22 @@ jobs:
       RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || format('dev-{0}', github.sha) }}
       RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && (inputs.release_name != '' && inputs.release_name || format('GitHubRunnerMenu v{0}', inputs.version)) || format('GitHubRunnerMenu dev-{0}', github.sha) }}
     steps:
+      - name: Skip X post for manual prereleases
+        if: github.event_name == 'workflow_dispatch' && inputs.prerelease == true
+        run: echo "X posting skipped for prerelease releases."
+
       - name: Skip when X secrets are not configured
-        if: env.X_API_KEY == '' || env.X_API_SECRET == '' || env.X_ACCESS_TOKEN == '' || env.X_ACCESS_TOKEN_SECRET == ''
+        if: (github.event_name != 'workflow_dispatch' || inputs.prerelease != true) && (env.X_API_KEY == '' || env.X_API_SECRET == '' || env.X_ACCESS_TOKEN == '' || env.X_ACCESS_TOKEN_SECRET == '')
         run: echo "X posting skipped because one or more X API secrets are missing."
 
       - name: Set up Node.js
-        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
+        if: (github.event_name != 'workflow_dispatch' || inputs.prerelease != true) && env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Post release announcement
-        if: env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
+        if: (github.event_name != 'workflow_dispatch' || inputs.prerelease != true) && env.X_API_KEY != '' && env.X_API_SECRET != '' && env.X_ACCESS_TOKEN != '' && env.X_ACCESS_TOKEN_SECRET != ''
         run: |
           npm init -y >/dev/null 2>&1
           npm install twitter-api-v2 >/dev/null 2>&1
