@@ -64,6 +64,19 @@ Useful script modes:
 ./script/build_and_run.sh --debug
 ```
 
+### Automatic X posting for new releases
+
+The release workflow can also post automatically to X after a new GitHub release is published.
+
+To enable it, add these repository secrets in GitHub:
+
+- `X_API_KEY`
+- `X_API_SECRET`
+- `X_ACCESS_TOKEN`
+- `X_ACCESS_TOKEN_SECRET`
+
+The workflow only posts for manually triggered releases and skips prereleases. If the secrets are missing, the release still succeeds and the X post is simply skipped.
+
 ### How to use
 
 1. Install and configure your self-hosted GitHub Actions runner.
@@ -148,6 +161,19 @@ Hasznos script módok:
 ./script/build_and_run.sh --telemetry
 ./script/build_and_run.sh --debug
 ```
+
+### Automatikus X-poszt új release esetén
+
+A release workflow képes automatikusan posztolni X-re is, miután elkészült az új GitHub release.
+
+Ehhez ezeket a repository secret-eket kell beállítani GitHubban:
+
+- `X_API_KEY`
+- `X_API_SECRET`
+- `X_ACCESS_TOKEN`
+- `X_ACCESS_TOKEN_SECRET`
+
+A workflow csak a kézzel indított release-eknél posztol, prerelease esetén nem. Ha a secretek hiányoznak, a release attól még rendben lefut, csak az X-posztolás marad ki.
 
 ### Használat
 
