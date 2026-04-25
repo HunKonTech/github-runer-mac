@@ -81,3 +81,17 @@ struct RunnerSnapshot {
         activity: .stopped
     )
 }
+
+struct RunnerResourceUsage {
+    var isRunning: Bool
+    var isJobActive: Bool
+    var cpuPercent: Double
+    var memoryMB: Double
+
+    static let zero = RunnerResourceUsage(
+        isRunning: false,
+        isJobActive: false,
+        cpuPercent: 0,
+        memoryMB: 0
+    )
+}

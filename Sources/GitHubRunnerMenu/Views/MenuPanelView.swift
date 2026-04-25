@@ -45,6 +45,8 @@ struct MenuPanelView: View {
                     value: store.launchAtLoginStatusText,
                     color: launchAtLoginColor
                 )
+
+                RunnerResourceUsageView(usage: store.runnerResourceUsage)
             }
 
             if let errorMessage = store.lastErrorMessage {
@@ -178,6 +180,58 @@ struct MenuPanelView: View {
             .red
         @unknown default:
             .yellow
+        }
+    }
+}
+
+private struct RunnerResourceUsageView: View {
+    let usage: RunnerResourceUsage
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup("Haladó nézet", isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                UsageRow(
+                    title: "Runner:",
+                    value: usage.isRunning ? "fut" : "nem fut"
+                )
+
+                UsageRow(
+                    title: "CPU:",
+                    value: String(format: "%.1f%%", usage.cpuPercent)
+                )
+
+                UsageRow(
+                    title: "Memória:",
+                    value: "\(Int(usage.memoryMB.rounded())) MB"
+                )
+
+                UsageRow(
+                    title: "Job aktív:",
+                    value: usage.isJobActive ? "igen" : "nem"
+                )
+            }
+            .padding(.top, 6)
+        }
+        .font(.subheadline)
+    }
+}
+
+private struct UsageRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .fontWeight(.medium)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 }

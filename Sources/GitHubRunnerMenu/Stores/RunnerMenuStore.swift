@@ -11,6 +11,7 @@ final class RunnerMenuStore {
 
     @ObservationIgnored private let controller: RunnerController
     @ObservationIgnored private let networkMonitor = NetworkConditionMonitor()
+    @ObservationIgnored private let resourceMonitor = RunnerResourceMonitor()
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private let logger = Logger(
         subsystem: "com.koncsik.githubrunnermenu",
@@ -21,6 +22,7 @@ final class RunnerMenuStore {
     var launchAtLoginStatus: SMAppService.Status
     var networkSnapshot: NetworkConditionSnapshot = .unknown
     var runnerSnapshot: RunnerSnapshot = .stopped
+    var runnerResourceUsage: RunnerResourceUsage = .zero
     var lastErrorMessage: String?
 
     init(
@@ -43,6 +45,12 @@ final class RunnerMenuStore {
         launchAtLoginStatus = SMAppService.mainApp.status
 
         startMonitoring()
+    }
+
+    deinit {
+        refreshTask?.cancel()
+        networkMonitor.stop()
+        resourceMonitor.stop()
     }
 
     var menuBarSymbolName: String {
@@ -176,6 +184,10 @@ final class RunnerMenuStore {
         }
 
         networkMonitor.start()
+
+        resourceMonitor.start { [weak self] usage in
+            self?.runnerResourceUsage = usage
+        }
 
         refreshTask = Task { [weak self] in
             guard let self else {
