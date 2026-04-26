@@ -131,6 +131,18 @@ private struct GeneralSettingsPane: View {
                     store.openLoginItemsSettings()
                 }
             }
+
+            if preferences.hasBattery {
+                Toggle(
+                    AppStrings.settingsStopOnBatteryTitle,
+                    isOn: $preferences.stopRunnerOnBattery
+                )
+
+                Text(AppStrings.settingsStopOnBatteryExplanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

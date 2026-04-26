@@ -12,6 +12,7 @@ final class RunnerMenuStore {
     @ObservationIgnored private let controller: RunnerController
     @ObservationIgnored private let networkMonitor = NetworkConditionMonitor()
     @ObservationIgnored private let resourceMonitor = RunnerResourceMonitor()
+    @ObservationIgnored private let batteryMonitor = BatteryMonitor()
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private let logger = Logger(
         subsystem: "com.koncsik.githubrunnermenu",
@@ -25,6 +26,7 @@ final class RunnerMenuStore {
     var networkSnapshot: NetworkConditionSnapshot = .unknown
     var runnerSnapshot: RunnerSnapshot = .stopped
     var runnerResourceUsage: RunnerResourceUsage = .zero
+    var batterySnapshot: BatterySnapshot = BatterySnapshot(isOnBattery: false, isCharging: false, hasBattery: false)
     var lastErrorMessage: String?
 
     init(
@@ -54,6 +56,7 @@ final class RunnerMenuStore {
         refreshTask?.cancel()
         networkMonitor.stop()
         resourceMonitor.stop()
+        batteryMonitor.stop()
     }
 
     private func registerForSleepWakeNotifications() {
@@ -214,6 +217,16 @@ final class RunnerMenuStore {
             self?.runnerResourceUsage = usage
         }
 
+        batteryMonitor.onChange = { [weak self] snapshot in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.logger.info("Battery state changed: \(snapshot.description, privacy: .public)")
+                self.batterySnapshot = snapshot
+                self.reconcileState(trigger: "battery change")
+            }
+        }
+        batteryMonitor.start()
+
         refreshTask = Task { [weak self] in
             guard let self else {
                 return
@@ -272,6 +285,11 @@ final class RunnerMenuStore {
     }
 
     private func applyDesiredRunnerState() throws {
+        if AppPreferencesStore.shared.stopRunnerOnBattery && !batterySnapshot.canRun {
+            controller.stopIfNeeded()
+            return
+        }
+
         switch controlMode {
         case .automatic:
             switch networkSnapshot.automaticDecision {

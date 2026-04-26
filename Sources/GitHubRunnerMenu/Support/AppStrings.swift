@@ -109,6 +109,9 @@ private enum AppTextKey: String {
     case errorMissingRunnerScript
     case errorLaunchAtLoginUpdate
     case errorRunnerHandling
+    case settingsStopOnBatteryTitle
+    case settingsStopOnBatteryExplanation
+    case settingsStopOnBatteryUnavailable
 }
 
 enum AppStrings {
@@ -306,6 +309,9 @@ enum AppStrings {
         .errorMissingRunnerScript: "Cannot find the runner startup script: %@",
         .errorLaunchAtLoginUpdate: "Failed to update launch at login: %@",
         .errorRunnerHandling: "Failed to manage the runner: %@",
+        .settingsStopOnBatteryTitle: "Pause runner on battery",
+        .settingsStopOnBatteryExplanation: "Automatically stop the runner when running on battery power and resume when connected to power.",
+        .settingsStopOnBatteryUnavailable: "Not available on this Mac",
     ]
 
     private static func catalog(_ overrides: Catalog) -> Catalog {
@@ -423,6 +429,9 @@ enum AppStrings {
             .errorMissingRunnerScript: "Nem találom a runner indító scriptet: %@",
             .errorLaunchAtLoginUpdate: "Az automatikus indítás beállítása nem sikerült: %@",
             .errorRunnerHandling: "Nem sikerült a runner kezelése: %@",
+            .settingsStopOnBatteryTitle: "Runner szüneteltetése akkumulátoron",
+            .settingsStopOnBatteryExplanation: "Automatikusan leállítja a runnert, amikor akkumulátorról fut, és folytatja, amikor áramforrásra van csatlakoztatva.",
+            .settingsStopOnBatteryUnavailable: "Nem érhető el ezen a Mac-en",
         ],
         "de": catalog([
             .statusActivityTitle: "Aktivität",
@@ -1294,5 +1303,9 @@ enum AppStrings {
     static func updateErrorDetails(_ reason: String) -> String {
         "Update failed: \(reason)"
     }
+
+    static var settingsStopOnBatteryTitle: String { value(.settingsStopOnBatteryTitle) }
+    static var settingsStopOnBatteryExplanation: String { value(.settingsStopOnBatteryExplanation) }
+    static var settingsStopOnBatteryUnavailable: String { value(.settingsStopOnBatteryUnavailable) }
 
 }

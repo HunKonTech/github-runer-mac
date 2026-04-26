@@ -1,4 +1,5 @@
 import Foundation
+import IOKit.ps
 import Observation
 
 enum AppLanguagePreference: String, CaseIterable, Identifiable {
@@ -55,6 +56,7 @@ final class AppPreferencesStore {
     nonisolated static let languageDefaultsKey = "AppLanguagePreference"
     nonisolated static let automaticUpdateCheckDefaultsKey = "AutomaticUpdateCheckEnabled"
     nonisolated static let updateChannelDefaultsKey = "UpdateChannel"
+    nonisolated static let stopOnBatteryDefaultsKey = "StopRunnerOnBattery"
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -74,6 +76,32 @@ final class AppPreferencesStore {
         didSet {
             defaults.set(updateChannel.rawValue, forKey: Self.updateChannelDefaultsKey)
         }
+    }
+
+    var stopRunnerOnBattery: Bool {
+        didSet {
+            defaults.set(stopRunnerOnBattery, forKey: Self.stopOnBatteryDefaultsKey)
+        }
+    }
+
+    var hasBattery: Bool {
+        guard let powerSourceInfo = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let powerSourceList = IOPSCopyPowerSourcesList(powerSourceInfo)?.takeRetainedValue() as? [CFTypeRef],
+              !powerSourceList.isEmpty
+        else {
+            return false
+        }
+
+        for source in powerSourceList {
+            if let info = IOPSGetPowerSourceDescription(powerSourceInfo, source)?.takeUnretainedValue() as? [String: Any] {
+                let type = info[kIOPSTypeKey as String] as? String
+                if type == kIOPSInternalBatteryType as String {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -101,6 +129,12 @@ final class AppPreferencesStore {
             updateChannel = savedChannel
         } else {
             updateChannel = .stable
+        }
+
+        if defaults.object(forKey: Self.stopOnBatteryDefaultsKey) == nil {
+            stopRunnerOnBattery = false
+        } else {
+            stopRunnerOnBattery = defaults.bool(forKey: Self.stopOnBatteryDefaultsKey)
         }
     }
 }
