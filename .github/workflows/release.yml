@@ -100,44 +100,60 @@ jobs:
             echo "prerelease=$PRERELEASE"
           } >> "$GITHUB_OUTPUT"
 
-  pick-runner:
-    name: Pick build runner
+  pick-runners:
+    name: Pick build runners
     runs-on: ubuntu-latest
     outputs:
-      runner: ${{ steps.pick.outputs.runner }}
+      mac_runner: ${{ steps.pick_mac.outputs.runner }}
+      windows_runner: ${{ steps.pick_windows.outputs.runner }}
     steps:
-      - name: Check self-hosted runner availability
-        id: pick
+      - name: Pick macOS runner
+        id: pick_mac
         env:
           GH_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+          OWNER: HunKonTech
         run: |
-          gh api "orgs/${{ env.OWNER }}/actions/runners" --jq '.runners[].name' || true
-
-          STATUS=$(gh api "orgs/${{ env.OWNER }}/actions/runners" \
+          STATUS=$(gh api "orgs/${OWNER}/actions/runners" \
             --jq '.runners[] | select(.name == "Koncsik-MacBook-Air") | .status' 2>/dev/null || echo "")
           if [ "$STATUS" = "online" ]; then
-            echo 'runner=["self-hosted", "macOS", "ARM64"]' >> "$GITHUB_OUTPUT"
-            echo "Runner: Koncsik-MacBook-Air (online)"
+            echo 'runner=["self-hosted","macOS","ARM64"]' >> "$GITHUB_OUTPUT"
+            echo "macOS Runner: Koncsik-MacBook-Air (online)"
           else
             echo 'runner=["macos-latest"]' >> "$GITHUB_OUTPUT"
-            echo "Runner: macos-latest (self-hosted offline)"
+            echo "macOS Runner: macos-latest (fallback)"
+          fi
+
+      - name: Pick Windows runner
+        id: pick_windows
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+          OWNER: HunKonTech
+        run: |
+          STATUS=$(gh api "orgs/${OWNER}/actions/runners" \
+            --jq '.runners[] | select(.name == "nagy_gep_windows") | .status' 2>/dev/null || echo "")
+          if [ "$STATUS" = "online" ]; then
+            echo 'runner=["self-hosted","Windows","X64"]' >> "$GITHUB_OUTPUT"
+            echo "Windows Runner: nagy_gep_windows (online)"
+          else
+            echo 'runner=["windows-latest"]' >> "$GITHUB_OUTPUT"
+            echo "Windows Runner: windows-latest (fallback)"
           fi
 
   build-macos:
     name: Build macOS App
     needs:
       - prepare
-      - pick-runner
-    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runner) }}
+      - pick-runners
+    runs-on: ${{ fromJSON(needs.pick-runners.outputs.mac_runner) }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Selected macOS runner
         shell: bash
-        run: echo '${{ needs.pick-runner.outputs.runner }}'
+        run: echo '${{ needs.pick-runners.outputs.mac_runner }}'
 
       - name: Select Xcode 16 on GitHub-hosted macOS
-        if: ${{ !contains(needs.pick-runner.outputs.runner, 'self-hosted') }}
+        if: ${{ !contains(needs.pick-runners.outputs.mac_runner, 'self-hosted') }}
         shell: bash
         run: |
           XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_16*.app' | sort -V | tail -n 1)"
