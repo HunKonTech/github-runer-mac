@@ -16,7 +16,7 @@ STAGING_DIR="$DIST_DIR/dmg-staging"
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
   echo "App bundle not found at $APP_BUNDLE" >&2
-  echo "Run APP_VERSION=$APP_VERSION ./script/build_and_run.sh --bundle first." >&2
+  echo "Run APP_VERSION=$APP_VERSION ./scripts/build_and_run.sh --bundle first." >&2
   exit 1
 fi
 

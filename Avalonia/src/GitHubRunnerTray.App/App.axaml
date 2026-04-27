@@ -1,0 +1,35 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GitHubRunnerTray.App.App"
+             RequestedThemeVariant="Default">
+
+  <Application.Styles>
+    <SimpleTheme />
+  </Application.Styles>
+
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/Icon.png"
+                ToolTipText="GitHub Runner Tray">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Status: Unknown" IsEnabled="False" />
+            <NativeMenuItem Header="Activity: Unknown" IsEnabled="False" />
+            <NativeMenuItem Header="Network: Unknown" IsEnabled="False" />
+            <NativeMenuItem Header="Mode: Automatic" IsEnabled="False" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Start Runner" />
+            <NativeMenuItem Header="Stop Runner" />
+            <NativeMenuItem Header="Refresh" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Settings" />
+            <NativeMenuItem Header="About" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Quit" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+
+</Application>

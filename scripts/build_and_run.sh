@@ -18,14 +18,14 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$PRODUCT_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
-ICON_FILE="$ROOT_DIR/Assets/AppIcon.icns"
+ICON_FILE="$ROOT_DIR/scripts/Assets/AppIcon.icns"
 
 pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
 
 swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIGURATION"
 BUILD_BINARY="$(swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIGURATION" --show-bin-path)/$PRODUCT_NAME"
-/usr/bin/swift "$ROOT_DIR/script/generate_icon.swift" >/dev/null
-/usr/bin/iconutil -c icns "$ROOT_DIR/Assets/AppIcon.iconset" -o "$ICON_FILE"
+/usr/bin/swift "$ROOT_DIR/scripts/generate_icon.swift" >/dev/null
+/usr/bin/iconutil -c icns "$ROOT_DIR/scripts/Assets/AppIcon.iconset" -o "$ROOT_DIR/scripts/Assets/AppIcon.icns"
 
 rm -rf "$DIST_DIR"/*.app
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"

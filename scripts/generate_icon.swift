@@ -1,8 +1,9 @@
 import AppKit
 
 let fm = FileManager.default
-let root = URL(fileURLWithPath: fm.currentDirectoryPath)
-let assetsDir = root.appendingPathComponent("Assets", isDirectory: true)
+let scriptPath = #file
+let scriptDir = URL(fileURLWithPath: scriptPath).deletingLastPathComponent()
+let assetsDir = scriptDir.appendingPathComponent("Assets", isDirectory: true)
 let iconsetDir = assetsDir.appendingPathComponent("AppIcon.iconset", isDirectory: true)
 let basePNG = assetsDir.appendingPathComponent("AppIcon-1024.png")
 
