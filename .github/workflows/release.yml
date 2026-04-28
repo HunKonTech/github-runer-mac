@@ -154,9 +154,9 @@ jobs:
           xcodebuild -version
           swift --version
 
-       - name: Build macOS sources
-         shell: bash
-         run: swift build --jobs 1
+        - name: Build macOS sources
+          shell: bash
+          run: swift build --package-path swfit --jobs 1
 
         - name: Build app bundle
           shell: bash
