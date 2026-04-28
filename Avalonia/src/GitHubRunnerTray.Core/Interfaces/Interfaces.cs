@@ -53,6 +53,7 @@ public interface IPreferencesStore
 {
     AppLanguage Language { get; set; }
     string RunnerDirectory { get; set; }
+    RunnerControlMode ControlMode { get; set; }
     bool AutomaticUpdateCheckEnabled { get; set; }
     UpdateChannel UpdateChannel { get; set; }
     bool StopRunnerOnBattery { get; set; }

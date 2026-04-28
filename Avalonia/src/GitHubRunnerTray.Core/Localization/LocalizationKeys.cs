@@ -25,6 +25,7 @@ public static class LocalizationKeys
     public const string ToggleLaunchAtLogin = "toggleLaunchAtLogin";
     public const string ButtonOpenLoginItemsSettings = "buttonOpenLoginItemsSettings";
     public const string ButtonOpenRunnerDirectory = "buttonOpenRunnerDirectory";
+    public const string ButtonChooseRunnerDirectory = "buttonChooseRunnerDirectory";
     public const string ButtonOpenUpdateWindow = "buttonOpenUpdateWindow";
     public const string ButtonOpenAboutWindow = "buttonOpenAboutWindow";
     public const string ButtonOpenSettingsWindow = "buttonOpenSettingsWindow";
@@ -49,10 +50,12 @@ public static class LocalizationKeys
     public const string SettingsNetworkPolicyTitle = "settingsNetworkPolicyTitle";
     public const string SettingsNetworkOverrideTitle = "settingsNetworkOverrideTitle";
     public const string SettingsNetworkExplanation = "settingsNetworkExplanation";
+    public const string SettingsNetworkDecisionExplanation = "settingsNetworkDecisionExplanation";
     public const string SettingsAdvancedRunnerProcessTitle = "settingsAdvancedRunnerProcessTitle";
     public const string SettingsAdvancedCPU = "settingsAdvancedCPU";
     public const string SettingsAdvancedMemory = "settingsAdvancedMemory";
     public const string SettingsAdvancedJobActive = "settingsAdvancedJobActive";
+    public const string SettingsAdvancedLastRefresh = "settingsAdvancedLastRefresh";
     public const string SettingsAboutAppNameTitle = "settingsAboutAppNameTitle";
     public const string SettingsAboutLicenseTitle = "settingsAboutLicenseTitle";
     public const string SettingsAboutLicenseValue = "settingsAboutLicenseValue";

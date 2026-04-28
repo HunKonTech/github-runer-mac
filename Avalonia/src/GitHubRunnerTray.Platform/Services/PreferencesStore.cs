@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using GitHubRunnerTray.Core.Interfaces;
 using GitHubRunnerTray.Core.Models;
 
@@ -8,14 +9,16 @@ public class PreferencesStore : IPreferencesStore
 {
     private const string FileName = "settings.json";
     private readonly string _filePath;
-    private Dictionary<string, object> _settings = new();
+    private JsonObject _settings = new();
 
-    public PreferencesStore()
+    public PreferencesStore(string? filePath = null)
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var folder = Path.Combine(appData, "GitHubRunnerTray");
+        _filePath = filePath ?? DefaultFilePath();
+        var folder = Path.GetDirectoryName(_filePath);
+        if (string.IsNullOrEmpty(folder))
+            folder = Directory.GetCurrentDirectory();
+
         Directory.CreateDirectory(folder);
-        _filePath = Path.Combine(folder, FileName);
         Load();
     }
 
@@ -26,7 +29,7 @@ public class PreferencesStore : IPreferencesStore
             if (File.Exists(_filePath))
             {
                 var json = File.ReadAllText(_filePath);
-                _settings = JsonSerializer.Deserialize<Dictionary<string, object>>(json) ?? new();
+                _settings = JsonNode.Parse(json)?.AsObject() ?? new();
             }
         }
         catch
@@ -47,7 +50,7 @@ public class PreferencesStore : IPreferencesStore
 
     public AppLanguage Language
     {
-        get => GetEnum(AppLanguage.System, "Language");
+        get => GetEnum(PreferenceDefaults.Language, "Language");
         set
         {
             _settings["Language"] = value.ToString();
@@ -57,10 +60,20 @@ public class PreferencesStore : IPreferencesStore
 
     public string RunnerDirectory
     {
-        get => GetString("", "RunnerDirectory");
+        get => GetString(DefaultRunnerDirectory(), "RunnerDirectory");
         set
         {
             _settings["RunnerDirectory"] = value;
+            Save();
+        }
+    }
+
+    public RunnerControlMode ControlMode
+    {
+        get => GetEnum(PreferenceDefaults.ControlMode, "ControlMode");
+        set
+        {
+            _settings["ControlMode"] = value.ToString();
             Save();
         }
     }
@@ -77,7 +90,7 @@ public class PreferencesStore : IPreferencesStore
 
     public UpdateChannel UpdateChannel
     {
-        get => GetUpdateChannel(UpdateChannel.Stable, "UpdateChannel");
+        get => GetEnum(PreferenceDefaults.UpdateChannel, "UpdateChannel");
         set
         {
             _settings["UpdateChannel"] = value.ToString();
@@ -87,7 +100,7 @@ public class PreferencesStore : IPreferencesStore
 
     public bool StopRunnerOnBattery
     {
-        get => GetBool(false, "StopRunnerOnBattery");
+        get => GetBool(PreferenceDefaults.StopRunnerOnBattery, "StopRunnerOnBattery");
         set
         {
             _settings["StopRunnerOnBattery"] = value;
@@ -95,21 +108,12 @@ public class PreferencesStore : IPreferencesStore
         }
     }
 
-    private AppLanguage GetEnum(AppLanguage defaultValue, string key)
+    private TEnum GetEnum<TEnum>(TEnum defaultValue, string key) where TEnum : struct, Enum
     {
-        if (_settings.TryGetValue(key, out var value) && value is string str)
+        var str = GetString("", key);
+        if (!string.IsNullOrWhiteSpace(str))
         {
-            if (Enum.TryParse<AppLanguage>(str, out var result))
-                return result;
-        }
-        return defaultValue;
-    }
-
-    private UpdateChannel GetUpdateChannel(UpdateChannel defaultValue, string key)
-    {
-        if (_settings.TryGetValue(key, out var value) && value is string str)
-        {
-            if (Enum.TryParse<UpdateChannel>(str, out var result))
+            if (Enum.TryParse<TEnum>(str, out var result))
                 return result;
         }
         return defaultValue;
@@ -117,17 +121,44 @@ public class PreferencesStore : IPreferencesStore
 
     private bool GetBool(bool defaultValue, string key)
     {
-        if (_settings.TryGetValue(key, out var value))
+        if (_settings.TryGetPropertyValue(key, out var value))
         {
-            if (value is bool b) return b;
-            if (value is string s && bool.TryParse(s, out var parsed)) return parsed;
+            if (value is JsonValue jsonValue && jsonValue.TryGetValue<bool>(out var b)) return b;
+            if (bool.TryParse(value?.ToString(), out var parsed)) return parsed;
         }
         return defaultValue;
     }
 
     private string GetString(string defaultValue, string key)
     {
-        return _settings.TryGetValue(key, out var value) ? value?.ToString() ?? defaultValue : defaultValue;
+        if (!_settings.TryGetPropertyValue(key, out var value))
+            return defaultValue;
+
+        var result = value?.ToString() ?? defaultValue;
+        return string.IsNullOrWhiteSpace(result) ? defaultValue : result;
+    }
+
+    private static string DefaultRunnerDirectory()
+    {
+        if (OperatingSystem.IsMacOS())
+            return PreferenceDefaults.MacOsRunnerDirectory;
+
+        if (OperatingSystem.IsLinux())
+            return "/home/" + Environment.UserName + "/actions-runner";
+
+        if (OperatingSystem.IsWindows())
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(userProfile, "GitHub", "actions-runner");
+        }
+
+        return "/actions-runner";
+    }
+
+    private static string DefaultFilePath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "GitHubRunnerTray", FileName);
     }
 }
 

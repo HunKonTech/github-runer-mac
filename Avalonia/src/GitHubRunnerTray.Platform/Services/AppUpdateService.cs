@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using GitHubRunnerTray.Core.Interfaces;
 using GitHubRunnerTray.Core.Models;
 
@@ -11,9 +12,11 @@ public class AppUpdateService : IAppUpdateService
     private const string Repository = "github-runer-mac";
 
     private readonly HttpClient _httpClient;
+    private readonly IPreferencesStoreFactory _preferencesFactory;
 
-    public AppUpdateService()
+    public AppUpdateService(IPreferencesStoreFactory? preferencesFactory = null)
     {
+        _preferencesFactory = preferencesFactory ?? new PreferencesStoreFactory();
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "GitHubRunnerTray");
     }
@@ -22,7 +25,10 @@ public class AppUpdateService : IAppUpdateService
     {
         try
         {
-            var apiUrl = $"https://api.github.com/repos/{Owner}/{Repository}/releases/latest";
+            var channel = _preferencesFactory.Create().UpdateChannel;
+            var apiUrl = channel == UpdateChannel.Preview
+                ? $"https://api.github.com/repos/{Owner}/{Repository}/releases"
+                : $"https://api.github.com/repos/{Owner}/{Repository}/releases/latest";
             var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             request.Headers.Add("Accept", "application/vnd.github+json");
 
@@ -35,7 +41,9 @@ public class AppUpdateService : IAppUpdateService
                 return null;
 
             var json = await response.Content.ReadAsStringAsync();
-            var release = JsonSerializer.Deserialize<GitHubReleaseResponse>(json);
+            var release = channel == UpdateChannel.Preview
+                ? JsonSerializer.Deserialize<List<GitHubReleaseResponse>>(json)?.FirstOrDefault()
+                : JsonSerializer.Deserialize<GitHubReleaseResponse>(json);
 
             if (release == null)
                 return null;
@@ -124,14 +132,24 @@ public class AppUpdateService : IAppUpdateService
 
 internal class GitHubReleaseResponse
 {
+    [JsonPropertyName("tag_name")]
     public string? TagName { get; set; }
+
+    [JsonPropertyName("html_url")]
     public string? HtmlUrl { get; set; }
+
+    [JsonPropertyName("published_at")]
     public DateTime? PublishedAt { get; set; }
+
+    [JsonPropertyName("assets")]
     public List<GitHubAsset>? Assets { get; set; }
 }
 
 internal class GitHubAsset
 {
+    [JsonPropertyName("name")]
     public string? Name { get; set; }
+
+    [JsonPropertyName("browser_download_url")]
     public string? BrowserDownloadUrl { get; set; }
 }

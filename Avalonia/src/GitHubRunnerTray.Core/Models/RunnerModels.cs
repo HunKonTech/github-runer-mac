@@ -140,3 +140,12 @@ public enum LaunchAtLoginStatus
     Unavailable,
     Unknown
 }
+
+public static class PreferenceDefaults
+{
+    public const string MacOsRunnerDirectory = "/Users/koncsikbenedek/GitHub/actions-runner";
+    public const UpdateChannel UpdateChannel = Models.UpdateChannel.Stable;
+    public const AppLanguage Language = AppLanguage.System;
+    public const bool StopRunnerOnBattery = false;
+    public const RunnerControlMode ControlMode = RunnerControlMode.Automatic;
+}

@@ -75,7 +75,7 @@ public class RunnerLogParser : IRunnerLogParser
                 continue;
             }
 
-            if (trimmed.Contains(" completed with result:"))
+            if (trimmed.Contains("completed with result:"))
             {
                 latestActivity = new RunnerActivitySnapshot
                 {

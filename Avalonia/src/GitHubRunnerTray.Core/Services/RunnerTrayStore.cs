@@ -22,6 +22,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     private Timer? _refreshTimer;
     private string _runnerDirectory;
     private bool _disposed;
+    private readonly SemaphoreSlim _reconcileLock = new(1, 1);
 
     [ObservableProperty]
     private RunnerControlMode _controlMode = RunnerControlMode.Automatic;
@@ -44,6 +45,9 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     [ObservableProperty]
     private string? _lastErrorMessage;
 
+    [ObservableProperty]
+    private DateTime? _lastRefreshTime;
+
     public string RunnerDirectory
     {
         get => _runnerDirectory;
@@ -51,6 +55,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         {
             if (SetProperty(ref _runnerDirectory, value))
             {
+                _preferencesFactory.Create().RunnerDirectory = value;
                 UpdateController();
             }
         }
@@ -62,7 +67,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         set
         {
             _preferencesFactory.Create().StopRunnerOnBattery = value;
-            ReconcileState("battery setting changed");
+            _ = ReconcileStateAsync("battery setting changed");
         }
     }
 
@@ -81,15 +86,9 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         _networkMonitor = networkMonitor;
         _batteryMonitorFactory = batteryMonitorFactory;
 
-        _runnerDirectory = GetDefaultRunnerDirectory();
-
         var prefs = _preferencesFactory.Create();
-        if (!string.IsNullOrEmpty(prefs.RunnerDirectory))
-            _runnerDirectory = prefs.RunnerDirectory;
-
-        var savedControlMode = prefs.RunnerDirectory;
-        if (Enum.TryParse<RunnerControlMode>(savedControlMode, out var mode))
-            ControlMode = mode;
+        _runnerDirectory = prefs.RunnerDirectory;
+        ControlMode = prefs.ControlMode;
 
         Initialize();
     }
@@ -97,7 +96,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     private static string GetDefaultRunnerDirectory()
     {
         if (OperatingSystem.IsMacOS())
-            return "/Users/" + Environment.UserName + "/GitHub/actions-runner";
+            return PreferenceDefaults.MacOsRunnerDirectory;
 
         if (OperatingSystem.IsLinux())
             return "/home/" + Environment.UserName + "/actions-runner";
@@ -126,7 +125,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         _refreshTimer.Elapsed += OnRefreshTimerElapsed;
         _refreshTimer.Start();
 
-        ReconcileState("initialization");
+        _ = ReconcileStateAsync("initialization");
     }
 
     private void UpdateController()
@@ -138,44 +137,64 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         _controller = _controllerFactory.Create(dirInfo);
         _resourceMonitor = _resourceMonitorFactory.Create(dirInfo);
 
-        ReconcileState("controller updated");
+        _ = ReconcileStateAsync("controller updated");
     }
 
     private void OnNetworkChanged(object? sender, NetworkConditionSnapshot snapshot)
     {
         NetworkSnapshot = snapshot;
-        ReconcileState("network change");
+        _ = ReconcileStateAsync("network change");
     }
 
     private void OnBatteryChanged(object? sender, BatterySnapshot snapshot)
     {
         BatterySnapshot = snapshot;
-        ReconcileState("battery change");
+        _ = ReconcileStateAsync("battery change");
     }
 
     private void OnRefreshTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        ReconcileState("periodic refresh");
+        _ = ReconcileStateAsync("periodic refresh");
     }
 
     public void RefreshNow()
     {
-        ReconcileState("manual refresh");
+        _ = RefreshNowAsync();
+    }
+
+    public Task RefreshNowAsync()
+    {
+        return ReconcileStateAsync("manual refresh");
     }
 
     public void SetAutomaticMode()
     {
-        SetControlMode(RunnerControlMode.Automatic, "automatic mode");
+        _ = SetAutomaticModeAsync();
+    }
+
+    public Task SetAutomaticModeAsync()
+    {
+        return SetControlModeAsync(RunnerControlMode.Automatic, "automatic mode");
     }
 
     public void ForceStart()
     {
-        SetControlMode(RunnerControlMode.ForceRunning, "manual start");
+        _ = ForceStartAsync();
+    }
+
+    public Task ForceStartAsync()
+    {
+        return SetControlModeAsync(RunnerControlMode.ForceRunning, "manual start");
     }
 
     public void ForceStop()
     {
-        SetControlMode(RunnerControlMode.ForceStopped, "manual stop");
+        _ = ForceStopAsync();
+    }
+
+    public Task ForceStopAsync()
+    {
+        return SetControlModeAsync(RunnerControlMode.ForceStopped, "manual stop");
     }
 
     public async Task StartAsync()
@@ -192,7 +211,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
             LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, ex.Message);
         }
 
-        ReconcileState("manual start");
+        await ReconcileStateAsync("manual start");
     }
 
     public async Task StopAsync()
@@ -209,7 +228,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
             LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, ex.Message);
         }
 
-        ReconcileState("manual stop");
+        await ReconcileStateAsync("manual stop");
     }
 
     public void OpenRunnerDirectory()
@@ -232,61 +251,80 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     private void SetControlMode(RunnerControlMode mode, string trigger)
     {
+        _ = SetControlModeAsync(mode, trigger);
+    }
+
+    private async Task SetControlModeAsync(RunnerControlMode mode, string trigger)
+    {
         ControlMode = mode;
 
         var prefs = _preferencesFactory.Create();
-        prefs.RunnerDirectory = mode.ToString();
+        prefs.ControlMode = mode;
 
-        ReconcileState(trigger);
+        await ReconcileStateAsync(trigger);
     }
 
     private void ReconcileState(string trigger)
     {
+        _ = ReconcileStateAsync(trigger);
+    }
+
+    private async Task ReconcileStateAsync(string trigger)
+    {
+        await _reconcileLock.WaitAsync();
         try
         {
-            ApplyDesiredRunnerState();
+            await ApplyDesiredRunnerStateAsync();
+            UpdateSnapshot(trigger);
             LastErrorMessage = null;
         }
         catch (Exception ex)
         {
             LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, ex.Message);
         }
-
-        UpdateSnapshot(trigger);
+        finally
+        {
+            _reconcileLock.Release();
+        }
     }
 
-    private void ApplyDesiredRunnerState()
+    private async Task ApplyDesiredRunnerStateAsync()
     {
         if (StopRunnerOnBattery && !BatterySnapshot.CanRun)
         {
-            _controller?.StopAsync().Wait();
+            if (_controller != null)
+                await _controller.StopAsync();
             return;
         }
 
         switch (ControlMode)
         {
             case RunnerControlMode.Automatic:
-                ApplyAutomaticDecision();
+                await ApplyAutomaticDecisionAsync();
                 break;
             case RunnerControlMode.ForceRunning:
-                _controller?.StartAsync().Wait();
+                if (_controller != null)
+                    await _controller.StartAsync();
                 break;
             case RunnerControlMode.ForceStopped:
-                _controller?.StopAsync().Wait();
+                if (_controller != null)
+                    await _controller.StopAsync();
                 break;
         }
     }
 
-    private void ApplyAutomaticDecision()
+    private async Task ApplyAutomaticDecisionAsync()
     {
         var decision = NetworkSnapshot.AutomaticDecision;
         switch (decision)
         {
             case NetworkDecision.Run:
-                _controller?.StartAsync().Wait();
+                if (_controller != null)
+                    await _controller.StartAsync();
                 break;
             case NetworkDecision.Stop:
-                _controller?.StopAsync().Wait();
+                if (_controller != null)
+                    await _controller.StopAsync();
                 break;
             case NetworkDecision.Keep:
                 break;
@@ -323,6 +361,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         }
 
         RunnerSnapshot = snapshot;
+        LastRefreshTime = DateTime.Now;
 
         if (_resourceMonitor != null)
             ResourceUsage = _resourceMonitor.GetCurrentUsage();
