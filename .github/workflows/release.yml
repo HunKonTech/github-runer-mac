@@ -105,8 +105,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       mac_runner: ${{ steps.pick_mac.outputs.runner }}
-      windows_runner: ${{ steps.pick_windows.outputs.runner }}
-      linux_runner: ${{ steps.pick_linux.outputs.runner }}
     steps:
       - name: Pick macOS runner
         id: pick_mac
@@ -123,29 +121,6 @@ jobs:
             echo 'runner=["macos-latest"]' >> "$GITHUB_OUTPUT"
             echo "macOS Runner: macos-latest (fallback)"
           fi
-
-      - name: Pick Windows runner
-        id: pick_windows
-        env:
-          GH_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
-          OWNER: HunKonTech
-        run: |
-          STATUS=$(gh api "orgs/${OWNER}/actions/runners" \
-            --jq '.runners[] | select(.name == "nagy_gep_windows") | .status' 2>/dev/null || echo "")
-          if [ "$STATUS" = "online" ]; then
-            echo 'runner=["self-hosted","Windows","X64"]' >> "$GITHUB_OUTPUT"
-            echo "Windows Runner: nagy_gep_windows (online)"
-          else
-            echo 'runner=["windows-latest"]' >> "$GITHUB_OUTPUT"
-            echo "Windows Runner: windows-latest (fallback)"
-          fi
-
-      - name: Pick Linux runner
-        id: pick_linux
-        shell: bash
-        run: |
-          echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
-          echo "Linux Runner: ubuntu-latest"
 
   build-macos:
     name: Build macOS App
@@ -179,17 +154,17 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Build macOS sources
-        shell: bash
-        run: swift build --package-path swfit --jobs 1
+       - name: Build macOS sources
+         shell: bash
+         run: swift build --jobs 1
 
-      - name: Build app bundle
-        shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" BUILD_CONFIGURATION=release ./scripts/build_and_run_swift.sh --bundle
+        - name: Build app bundle
+          shell: bash
+          run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" BUILD_CONFIGURATION=release ./scripts/build_and_run_swift.sh --bundle
 
-      - name: Build DMG installer
-        shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" ./scripts/build_dmg_swfit.sh
+        - name: Build DMG installer
+          shell: bash
+          run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" ./scripts/build_dmg_swfit.sh
 
       - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4
@@ -198,133 +173,12 @@ jobs:
           path: release/GitHubRunnerMenu-macOS-*-${{ needs.prepare.outputs.package_version }}.dmg
           if-no-files-found: error
 
-  build-avalonia-macos:
-    name: Build Avalonia macOS App
-    needs:
-      - prepare
-      - pick-runners
-    runs-on: ${{ fromJSON(needs.pick-runners.outputs.mac_runner) }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Selected macOS runner
-        shell: bash
-        run: echo '${{ needs.pick-runners.outputs.mac_runner }}'
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Publish Avalonia macOS app
-        shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" bash ./scripts/publish-macos-arm64.sh
-        working-directory: Avalonia
-
-      - name: Package Avalonia macOS app
-        shell: bash
-        run: |
-          mkdir -p release
-          tar -czf "release/GitHubRunnerTray-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/macos-arm64 .
-        working-directory: Avalonia
-
-      - name: Upload Avalonia macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-asset-avalonia-macos
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz
-          if-no-files-found: error
-
-  build-avalonia-windows:
-    name: Build Avalonia Windows App
-    needs:
-      - prepare
-      - pick-runners
-    runs-on: ${{ fromJSON(needs.pick-runners.outputs.windows_runner) }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Selected Windows runner
-        shell: bash
-        run: echo '${{ needs.pick-runners.outputs.windows_runner }}'
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Publish Avalonia Windows app
-        shell: pwsh
-        run: |
-          dotnet publish src/GitHubRunnerTray.App/GitHubRunnerTray.App.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=false `
-            -p:Version=${{ needs.prepare.outputs.package_version }} `
-            -o ./publish/win-x64
-        working-directory: Avalonia
-
-      - name: Package Avalonia Windows app
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitHubRunnerTray-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
-        working-directory: Avalonia
-
-      - name: Upload Avalonia Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-asset-avalonia-windows
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
-          if-no-files-found: error
-
-  build-avalonia-linux:
-    name: Build Avalonia Linux App
-    needs:
-      - prepare
-      - pick-runners
-    runs-on: ${{ fromJSON(needs.pick-runners.outputs.linux_runner) }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Selected Linux runner
-        shell: bash
-        run: echo '${{ needs.pick-runners.outputs.linux_runner }}'
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Publish Avalonia Linux app
-        shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" bash ./scripts/publish-linux-x64.sh
-        working-directory: Avalonia
-
-      - name: Package Avalonia Linux app
-        shell: bash
-        run: |
-          mkdir -p release
-          tar -czf "release/GitHubRunnerTray-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/linux-x64 .
-        working-directory: Avalonia
-
-      - name: Upload Avalonia Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-asset-avalonia-linux
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz
-          if-no-files-found: error
-
   release:
     name: Create GitHub Release
     needs:
       - prepare
       - build-macos
-      - build-avalonia-macos
-      - build-avalonia-windows
-      - build-avalonia-linux
-    if: ${{ always() && needs.build-macos.result == 'success' && needs.build-avalonia-macos.result == 'success' && needs.build-avalonia-windows.result == 'success' && needs.build-avalonia-linux.result == 'success' }}
+    if: ${{ always() && needs.build-macos.result == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       release_url: ${{ steps.release_url.outputs.url }}
@@ -350,17 +204,17 @@ jobs:
           name: ${{ needs.prepare.outputs.release_name }}
           prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
           body: |
-            Download the native macOS DMG installer or the Avalonia multiplatform builds from the assets below.
+            Download the native macOS DMG installer from the assets below.
 
-            The native macOS app is packaged as a drag-to-Applications installer. The Avalonia builds are published for Windows x64, Linux x64, and macOS arm64.
+            The native macOS app is packaged as a drag-to-Applications installer.
 
             Note: these builds are ad-hoc signed or unsigned. macOS may ask for confirmation the first time an app is opened.
 
             ---
 
-            Töltsd le a natív macOS DMG telepítőt vagy az Avalonia multiplatform buildeket az alábbi assetek közül.
+            Töltsd le a natív macOS DMG telepítőt az alábbi assetek közül.
 
-            A natív macOS alkalmazás behúzható az Applications mappába. Az Avalonia buildek Windows x64, Linux x64 és macOS arm64 platformokra készülnek.
+            A natív macOS alkalmazás behúzható az Applications mappába.
 
             Megjegyzés: ezek a buildek ad-hoc aláírással vagy aláírás nélkül készülnek. A macOS az első indításkor megerősítést kérhet.
 
@@ -371,9 +225,6 @@ jobs:
     needs:
       - prepare
       - build-macos
-      - build-avalonia-macos
-      - build-avalonia-windows
-      - build-avalonia-linux
       - release
     if: ${{ needs.release.result == 'success' && github.event_name == 'push' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
@@ -396,7 +247,4 @@ jobs:
             --app-name "${APP_NAME}" \
             --tag "${{ needs.prepare.outputs.tag }}" \
             --release-url "${{ needs.release.outputs.release_url }}" \
-            --platform "macOS=${{ needs.build-macos.result }}" \
-            --platform "Avalonia macOS=${{ needs.build-avalonia-macos.result }}" \
-            --platform "Avalonia Windows=${{ needs.build-avalonia-windows.result }}" \
-            --platform "Avalonia Linux=${{ needs.build-avalonia-linux.result }}"
+            --platform "macOS=${{ needs.build-macos.result }}"
