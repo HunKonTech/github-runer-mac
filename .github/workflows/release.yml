@@ -181,15 +181,15 @@ jobs:
 
       - name: Build macOS sources
         shell: bash
-        run: swift build
+        run: swift build --package-path swfit --jobs 1
 
       - name: Build app bundle
         shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" BUILD_CONFIGURATION=release ./script/build_and_run.sh --bundle
+        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" BUILD_CONFIGURATION=release ./scripts/build_and_run_swift.sh --bundle
 
       - name: Build DMG installer
         shell: bash
-        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" ./script/build_dmg.sh
+        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" ./scripts/build_dmg_swfit.sh
 
       - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4
