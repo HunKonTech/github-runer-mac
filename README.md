@@ -55,3 +55,51 @@ APP_VERSION=1.0.0 ./script/build_dmg.sh
 ```
 
 Az elkészült bundle itt lesz: `dist/GitHubRunnerMenu.app`, a telepítő pedig a `release/` mappában.
+
+## Avalonia (Cross-Platform)
+
+### English
+
+The **Avalonia** folder contains a cross-platform version of the app rewritten in C# / .NET 9 with Avalonia UI. This version supports Windows, macOS, and Linux.
+
+#### Build and Install
+
+```bash
+# Build
+cd Avalonia
+dotnet build
+
+# Publish for macOS (arm64)
+APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
+
+# Publish for Windows (x64)
+APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
+
+# Publish for Linux (x64)
+APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
+```
+
+The published app will be in the `Avalonia/publish/` folder.
+
+### Magyar
+
+Az **Avalonia** mappa az alkalmazás C# / .NET 9 + Avalonia UI-val újraírt multiplatform verzióját tartalmazza. Ez a verzió támogatja a Windows, macOS és Linux platformokat.
+
+#### Build és Telepítés
+
+```bash
+# Build
+cd Avalonia
+dotnet build
+
+# Publish macOS-re (arm64)
+APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
+
+# Publish Windows-ra (x64)
+APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
+
+# Publish Linux-ra (x64)
+APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
+```
+
+A publikált alkalmazás az `Avalonia/publish/` mappában lesz.

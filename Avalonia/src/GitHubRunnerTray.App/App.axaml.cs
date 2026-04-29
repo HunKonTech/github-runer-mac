@@ -79,7 +79,7 @@ public partial class App : Application
             Menu = CreateTrayActivationMenu()
         };
         
-        _trayIcon.Clicked += (s, e) => ShowTrayMenuWindow();
+        _trayIcon.Clicked += (s, e) => ToggleTrayMenuWindow();
 
         var trayIcons = new TrayIcons { _trayIcon };
         TrayIcon.SetIcons(this, trayIcons);

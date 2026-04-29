@@ -39,9 +39,12 @@ You can change this in Settings.
 ### Build Commands
 
 ```bash
-# Build
+# Build for development
 cd Avalonia
-./scripts/build.sh
+dotnet build
+
+# Build release
+dotnet build -c Release
 
 # Publish for macOS (arm64)
 APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
@@ -52,6 +55,13 @@ APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
 # Publish for Linux (x64)
 APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 ```
+
+#### Install the published app
+
+After publishing, the app will be in `Avalonia/publish/`. Run the executable:
+- **macOS**: `Avalonia/publish/osx-arm64/publish/GitHubRunnerTray.app/Contents/MacOS/GitHubRunnerTray`
+- **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
+- **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
 
 ### Technology Stack
 
@@ -111,9 +121,12 @@ Módosítható a Beállításokban.
 ### Build Parancsok
 
 ```bash
-# Build
+# Build fejlesztéshez
 cd Avalonia
-./scripts/build.sh
+dotnet build
+
+# Build release
+dotnet build -c Release
 
 # Publish macOS-re (arm64)
 APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
@@ -124,6 +137,13 @@ APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
 # Publish Linux-ra (x64)
 APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 ```
+
+#### Telepítés
+
+A publisholás után az alkalmazás az `Avalonia/publish/` mappában lesz. Futtatás:
+- **macOS**: `Avalonia/publish/osx-arm64/publish/GitHubRunnerTray.app/Contents/MacOS/GitHubRunnerTray`
+- **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
+- **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
 
 ### Tech Stack
 

@@ -14,9 +14,8 @@ namespace GitHubRunnerTray.App;
 
 public sealed class TrayMenuWindow : Window
 {
-    private const double PopoverWidth = 392;
-    private const double PopoverHeight = 548;
-    private static readonly TimeSpan DeactivationGracePeriod = TimeSpan.FromMilliseconds(700);
+    private const double PopoverWidth = 440;
+    private const double PopoverHeight = 640;
 
     private static SolidColorBrush Brush(string color) => new(Color.Parse(color));
 
@@ -41,8 +40,8 @@ public sealed class TrayMenuWindow : Window
     private readonly Func<Task> _refresh;
     private readonly Action _openSettings;
     private readonly Action _quit;
-    private DateTimeOffset _ignoreDeactivationUntil;
     private bool _isUpdatingLaunchAtLogin;
+    private bool _isAdvancedOpen;
 
     public TrayMenuWindow(
         RunnerTrayStore store,
@@ -78,14 +77,12 @@ public sealed class TrayMenuWindow : Window
         Topmost = true;
         ShowInTaskbar = false;
 
-        Deactivated += OnDeactivated;
         _store.PropertyChanged += OnStorePropertyChanged;
         Build();
     }
 
     public void ShowAsPopover()
     {
-        _ignoreDeactivationUntil = DateTimeOffset.UtcNow + DeactivationGracePeriod;
         Show();
         PositionNearMenuBar();
         Activate();
@@ -126,7 +123,12 @@ public sealed class TrayMenuWindow : Window
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(20, 16, 20, 18),
             ClipToBounds = true,
-            Child = BuildContent()
+            Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                Content = BuildContent()
+            }
         };
 
         Content = root;
@@ -211,6 +213,7 @@ public sealed class TrayMenuWindow : Window
         var expander = new Expander
         {
             Header = T(LocalizationKeys.AdvancedViewTitle),
+            IsExpanded = _isAdvancedOpen,
             Foreground = PrimaryTextBrush,
             FontSize = 14,
             FontWeight = FontWeight.SemiBold,
@@ -227,6 +230,12 @@ public sealed class TrayMenuWindow : Window
                     SmallStatusRow(LocalizationKeys.SettingsAdvancedJobActive, _store.ResourceUsage.IsJobActive ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))
                 }
             }
+        };
+
+        expander.PropertyChanged += (_, e) =>
+        {
+            if (e.Property.Name == nameof(Expander.IsExpanded))
+                _isAdvancedOpen = expander.IsExpanded;
         };
 
         return expander;
@@ -262,7 +271,7 @@ public sealed class TrayMenuWindow : Window
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("26,104,*"),
+            ColumnDefinitions = new ColumnDefinitions("26,108,*"),
             Height = 31
         };
 
@@ -282,7 +291,8 @@ public sealed class TrayMenuWindow : Window
             FontSize = 14,
             FontWeight = FontWeight.Bold,
             Foreground = PrimaryTextBrush,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis
         };
         grid.Children.Add(title);
         Grid.SetColumn(title, 1);
@@ -294,7 +304,9 @@ public sealed class TrayMenuWindow : Window
             FontWeight = FontWeight.SemiBold,
             Foreground = SecondaryTextBrush,
             TextAlignment = TextAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1
         };
         grid.Children.Add(detail);
         Grid.SetColumn(detail, 2);
@@ -306,7 +318,7 @@ public sealed class TrayMenuWindow : Window
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("112,*")
+            ColumnDefinitions = new ColumnDefinitions("*,Auto")
         };
 
         var title = new TextBlock
@@ -314,7 +326,9 @@ public sealed class TrayMenuWindow : Window
             Text = T(titleKey),
             FontSize = 12,
             FontWeight = FontWeight.SemiBold,
-            Foreground = PrimaryTextBrush
+            Foreground = PrimaryTextBrush,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1
         };
         grid.Children.Add(title);
         Grid.SetColumn(title, 0);
@@ -323,7 +337,9 @@ public sealed class TrayMenuWindow : Window
         {
             Text = value,
             FontSize = 12,
-            Foreground = SecondaryTextBrush
+            Foreground = SecondaryTextBrush,
+            Margin = new Thickness(12, 0, 0, 0),
+            TextAlignment = TextAlignment.Right
         };
         grid.Children.Add(detail);
         Grid.SetColumn(detail, 1);
@@ -464,22 +480,6 @@ public sealed class TrayMenuWindow : Window
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         Dispatcher.UIThread.Post(Build);
-    }
-
-    private void OnDeactivated(object? sender, EventArgs e)
-    {
-        var delay = _ignoreDeactivationUntil - DateTimeOffset.UtcNow;
-        if (delay <= TimeSpan.Zero)
-        {
-            Hide();
-            return;
-        }
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (!IsActive && DateTimeOffset.UtcNow >= _ignoreDeactivationUntil)
-                Hide();
-        }, DispatcherPriority.Background);
     }
 
     private static PixelPoint? GetPointerLocation()
