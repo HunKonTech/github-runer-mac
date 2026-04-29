@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>GitRunnerManager.Core</AssemblyName>
+    <RootNamespace>GitRunnerManager.Core</RootNamespace>
+    <PackageId>GitRunnerManager.Core</PackageId>
+    <AssemblyTitle>Git runner manager Core</AssemblyTitle>
+    <Product>Git runner manager</Product>
+    <Description>Core business logic for Git runner manager.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

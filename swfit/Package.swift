@@ -3,28 +3,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "GitHubRunner",
+    name: "GitRunnerManager",
     defaultLocalization: "en",
     platforms: [
         .macOS(.v14),
     ],
     products: [
         .executable(
-            name: "GitHubRunner",
-            targets: ["GitHubRunner"]
+            name: "GitRunnerManager",
+            targets: ["GitRunnerManager"]
         ),
     ],
     targets: [
         .executableTarget(
-            name: "GitHubRunner",
+            name: "GitRunnerManager",
             resources: [
                 .process("Resources"),
             ]
         ),
         .testTarget(
-            name: "GitHubRunnerTests",
-            dependencies: ["GitHubRunner"],
-            path: "tests/GitHubRunnerTests"
+            name: "GitRunnerManagerTests",
+            dependencies: ["GitRunnerManager"],
+            path: "tests/GitRunnerManagerTests"
         ),
     ]
 )

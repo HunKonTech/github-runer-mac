@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PRODUCT_NAME="GitHubRunnerMenu"
-DISPLAY_NAME="github runer mac"
+PRODUCT_NAME="GitRunnerManager"
+DISPLAY_NAME="Git runner manager"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

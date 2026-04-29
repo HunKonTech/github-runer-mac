@@ -1,10 +1,10 @@
-# GitHubRunnerTray (Avalonia)
+# GitRunnerManager (Avalonia)
 
 ## English
 
-**GitHubRunnerTray** is a cross-platform desktop application for managing a local GitHub Actions self-hosted runner. It provides system tray (Windows/Linux) or menu bar (macOS) integration for controlling the runner without opening Terminal.
+**GitRunnerManager** is a cross-platform desktop application for managing a local GitHub Actions self-hosted runner. It provides system tray (Windows/Linux) or menu bar (macOS) integration for controlling the runner without opening Terminal.
 
-This is a cross-platform port of the original [github-runer-mac](https://github.com/HunKonTech/github-runer-mac) Swift app, rewritten in C# / .NET 9 with Avalonia UI.
+This is a cross-platform port of the original [GitRunnerManager](https://github.com/HunKonTech/GitRunnerManager) Swift app, rewritten in C# / .NET 9 with Avalonia UI.
 
 ### Features
 
@@ -59,9 +59,9 @@ APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 #### Install the published app
 
 After publishing, the app will be in `Avalonia/publish/`. Run the executable:
-- **macOS**: `Avalonia/publish/osx-arm64/publish/GitHubRunnerTray.app/Contents/MacOS/GitHubRunnerTray`
-- **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
-- **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
+- **macOS**: `Avalonia/publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
+- **Windows**: `Avalonia/publish/win-x64/publish/GitRunnerManager.exe`
+- **Linux**: `Avalonia/publish/linux-x64/publish/GitRunnerManager`
 
 ### Screenshots
 
@@ -89,9 +89,9 @@ After publishing, the app will be in `Avalonia/publish/`. Run the executable:
 
 ## Magyar
 
-A **GitHubRunnerTray** egy multiplatform asztali alkalmazás helyi GitHub Actions self-hosted runner kezelésére. Rendszertálcás (Windows/Linux) vagy menüsoros (macOS) integrációt biztosít a runner vezérléséhez terminál nyitása nélkül.
+A **GitRunnerManager** egy multiplatform asztali alkalmazás helyi GitHub Actions self-hosted runner kezelésére. Rendszertálcás (Windows/Linux) vagy menüsoros (macOS) integrációt biztosít a runner vezérléséhez terminál nyitása nélkül.
 
-Ez az eredeti [github-runer-mac](https://github.com/HunKonTech/github-runer-mac) Swift alkalmazás cross-platform portja, C# / .NET 9 + Avalonia UI-val újraírva.
+Ez az eredeti [GitRunnerManager](https://github.com/HunKonTech/GitRunnerManager) Swift alkalmazás cross-platform portja, C# / .NET 9 + Avalonia UI-val újraírva.
 
 ### Funkciók
 
@@ -146,9 +146,9 @@ APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 #### Telepítés
 
 A publisholás után az alkalmazás az `Avalonia/publish/` mappában lesz. Futtatás:
-- **macOS**: `Avalonia/publish/osx-arm64/publish/GitHubRunnerTray.app/Contents/MacOS/GitHubRunnerTray`
-- **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
-- **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
+- **macOS**: `Avalonia/publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
+- **Windows**: `Avalonia/publish/win-x64/publish/GitRunnerManager.exe`
+- **Linux**: `Avalonia/publish/linux-x64/publish/GitRunnerManager`
 
 ### Képernyőképek
 

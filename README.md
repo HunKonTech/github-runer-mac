@@ -1,8 +1,8 @@
-# github runer mac
+# Git runner manager
 
 ## English
 
-`github runer mac` is a lightweight macOS menu bar app for managing a local GitHub Actions self-hosted runner. It shows the runner status, current activity, network condition, and launch-at-login state, and lets you start, stop, or switch back to automatic mode directly from the menu.
+`Git runner manager` is a lightweight macOS menu bar app for managing a local GitHub Actions self-hosted runner. It shows the runner status, current activity, network condition, and launch-at-login state, and lets you start, stop, or switch back to automatic mode directly from the menu.
 
 The app is designed for a local developer workflow where the runner should react to connectivity changes and stay easy to control without opening Terminal or the GitHub runner directory manually.
 
@@ -15,8 +15,8 @@ GitHub Actions builds and publishes a macOS `.dmg` installer for each release.
 To build the app bundle locally:
 
 ```bash
-git clone https://github.com/HunKonTech/github-runer-mac.git
-cd github-runer-mac
+git clone https://github.com/HunKonTech/GitRunnerManager.git
+cd GitRunnerManager
 ./script/build_and_run.sh --bundle
 ```
 
@@ -26,11 +26,11 @@ To create the DMG locally after the bundle exists:
 APP_VERSION=1.0.0 ./script/build_dmg.sh
 ```
 
-The bundle will be available in `dist/GitHubRunnerMenu.app`, and the installer in `release/`.
+The bundle will be available in `dist/GitRunnerManager.app`, and the installer in `release/`.
 
 ## Magyar
 
-A `github runer mac` egy könnyű, macOS menüsorban futó alkalmazás, amely egy helyi GitHub Actions self-hosted runner kezelésére készült. Megjeleníti a runner állapotát, az aktuális aktivitást, a hálózati állapotot és a bejelentkezéskori indítás állapotát, valamint közvetlenül a menüből lehet vele indítani, leállítani vagy visszakapcsolni automatikus módba.
+A `Git runner manager` egy könnyű, macOS menüsorban futó alkalmazás, amely egy helyi GitHub Actions self-hosted runner kezelésére készült. Megjeleníti a runner állapotát, az aktuális aktivitást, a hálózati állapotot és a bejelentkezéskori indítás állapotát, valamint közvetlenül a menüből lehet vele indítani, leállítani vagy visszakapcsolni automatikus módba.
 
 Az alkalmazás helyi fejlesztői használatra készült, ahol fontos, hogy a runner reagáljon a kapcsolat változásaira, és terminálhasználat nélkül is egyszerűen vezérelhető legyen.
 
@@ -43,8 +43,8 @@ A GitHub Actions minden release-hez macOS `.dmg` telepítőt buildel és tesz k�
 Ha helyben szeretnéd elkészíteni az alkalmazás bundle-t:
 
 ```bash
-git clone https://github.com/HunKonTech/github-runer-mac.git
-cd github-runer-mac
+git clone https://github.com/HunKonTech/GitRunnerManager.git
+cd GitRunnerManager
 ./script/build_and_run.sh --bundle
 ```
 
@@ -54,7 +54,7 @@ Ha a bundle elkészülte után helyben szeretnél DMG-t készíteni:
 APP_VERSION=1.0.0 ./script/build_dmg.sh
 ```
 
-Az elkészült bundle itt lesz: `dist/GitHubRunnerMenu.app`, a telepítő pedig a `release/` mappában.
+Az elkészült bundle itt lesz: `dist/GitRunnerManager.app`, a telepítő pedig a `release/` mappában.
 
 ## Avalonia (Cross-Platform)
 

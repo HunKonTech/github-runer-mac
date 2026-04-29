@@ -25,7 +25,7 @@ permissions:
   actions: read
 
 env:
-  APP_NAME: GitHubRunnerMenu
+  APP_NAME: GitRunnerManager
   OWNER: HunKonTech
 
 jobs:
@@ -195,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-native-macos
-          path: release/GitHubRunnerMenu-macOS-*-${{ needs.prepare.outputs.package_version }}.dmg
+          path: release/GitRunnerManager-macOS-*-${{ needs.prepare.outputs.package_version }}.dmg
           if-no-files-found: error
 
   build-avalonia-macos:
@@ -225,14 +225,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          tar -czf "release/GitHubRunnerTray-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/macos-arm64 .
+          tar -czf "release/GitRunnerManager-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/macos-arm64 .
         working-directory: Avalonia
 
       - name: Upload Avalonia macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-macos
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz
+          path: Avalonia/release/GitRunnerManager-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz
           if-no-files-found: error
 
   build-avalonia-windows:
@@ -262,14 +262,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitHubRunnerTray-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
+          Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
         working-directory: Avalonia
 
       - name: Upload Avalonia Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-windows
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
+          path: Avalonia/release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
           if-no-files-found: error
 
   build-avalonia-linux:
@@ -299,14 +299,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          tar -czf "release/GitHubRunnerTray-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/linux-x64 .
+          tar -czf "release/GitRunnerManager-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/linux-x64 .
         working-directory: Avalonia
 
       - name: Upload Avalonia Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-linux
-          path: Avalonia/release/GitHubRunnerTray-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz
+          path: Avalonia/release/GitRunnerManager-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz
           if-no-files-found: error
 
   release:

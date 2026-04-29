@@ -5,7 +5,7 @@ import pathlib
 import warnings
 
 
-SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "post_buffer_release.py"
+SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "post_buffer_release.py"
 SPEC = importlib.util.spec_from_file_location("post_buffer_release", SCRIPT_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

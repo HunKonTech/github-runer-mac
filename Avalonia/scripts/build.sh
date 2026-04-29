@@ -4,12 +4,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/.."
 
-echo "Building GitHubRunnerTray..."
+echo "Building GitRunnerManager..."
 
 cd "$PROJECT_DIR"
 
-dotnet restore GitHubRunnerTray.sln
+dotnet restore GitRunnerManager.sln
 
-dotnet build GitHubRunnerTray.sln -c Release
+dotnet build GitRunnerManager.sln -c Release
 
 echo "Build completed successfully."

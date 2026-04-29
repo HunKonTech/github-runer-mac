@@ -12,7 +12,7 @@ After translating the user's prompt to English, examine the translated prompt ca
 
 From README.md:
 
-`github runer mac` is a lightweight macOS menu bar app for managing a local GitHub Actions self-hosted runner. It shows the runner status, current activity, network condition, and launch-at-login state, and lets you start, stop, or switch back to automatic mode directly from the menu.
+`Git runner manager` is a lightweight macOS menu bar app for managing a local GitHub Actions self-hosted runner. It shows the runner status, current activity, network condition, and launch-at-login state, and lets you start, stop, or switch back to automatic mode directly from the menu.
 
 The app is designed for a local developer workflow where the runner should react to connectivity changes and stay easy to control without opening Terminal or the GitHub runner directory manually.
 
@@ -21,14 +21,14 @@ The app is designed for a local developer workflow where the runner should react
 A projekt két külön megoldást tartalmaz: egy natív SwiftUI macOS alkalmazást (`swfit/` mappa) és egy multiplatform Avalonia alkalmazást (`Avalonia/` mappa).
 
 ```
-github-runer-mac/
+GitRunnerManager/
 ├── Assets/                          # App ikonok és egyéb asset-ek
 ├── README.md                       # Projekt dokumentáció
 ├── swfit/                          # Natív SwiftUI macOS megoldás
 │   ├── Package.swift                    # Swift Package Manager config
-│   ├── Sources/GitHubRunner/
+│   ├── Sources/GitRunnerManager/
 │   │   ├── App/
-│   │   │   └── GitHubRunnerMenuApp.swift    # Main app entry point
+│   │   │   └── GitRunnerManagerApp.swift    # Main app entry point
 │   │   ├── Models/
 │   │   │   └── RunnerModels.swift           # Data models
 │   │   ├── Services/
@@ -50,7 +50,7 @@ github-runer-mac/
 │   │       └── MenuPanelView.swift            # Menu bar panel
 │   └── tests/                          # Swift test files
 ├── Avalonia/                         # Multiplatform Avalonia megoldás
-│   ├── GitHubRunnerTray.sln               # Visual Studio solution file
+│   ├── GitRunnerManager.sln               # Visual Studio solution file
 │   ├── README.md                          # Avalonia projekt dokumentáció
 │   ├── scripts/                           # Build és publish scriptek
 │   │   ├── build.sh                       # Build script
@@ -58,10 +58,10 @@ github-runer-mac/
 │   │   ├── publish-macos-arm64.sh         # macOS ARM64 publish
 │   │   └── publish-windows-x64.sh         # Windows x64 publish
 │   └── src/
-│       ├── GitHubRunnerTray.App/          # Main application project
-│       ├── GitHubRunnerTray.Core/         # Core business logic
-│       ├── GitHubRunnerTray.Platform/     # Platform-specific code
-│       └── GitHubRunnerTray.Tests/        # Unit tests
+│       ├── GitRunnerManager.App/          # Main application project
+│       ├── GitRunnerManager.Core/         # Core business logic
+│       ├── GitRunnerManager.Platform/     # Platform-specific code
+│       └── GitRunnerManager.Tests/        # Unit tests
 ├── scripts/                          # Közös build és utility scriptek
 │   ├── build_and_run_avalonia.sh          # Avalonia build és futtatás
 │   ├── build_and_run_swift.sh             # Swift build és futtatás

@@ -1,4 +1,4 @@
-# github-runer-mac Blueprint
+# GitRunnerManager Blueprint
 
 ## Overview
 
@@ -32,9 +32,9 @@ Both implementations share the same domain model and reconciliation logic but di
 swfit/
 ├── Package.swift
 ├── Assets/                          # App icons (.icns, .iconset)
-├── Sources/GitHubRunner/
+├── Sources/GitRunnerManager/
 │   ├── App/
-│   │   └── GitHubRunnerMenuApp.swift       # @main entry point
+│   │   └── GitRunnerManagerApp.swift       # @main entry point
 │   ├── Models/
 │   │   └── RunnerModels.swift              # Domain models & enums
 │   ├── Services/
@@ -59,7 +59,7 @@ swfit/
 │   └── Views/
 │       └── MenuPanelView.swift              # MenuBarExtra panel UI
 └── tests/
-    └── GitHubRunnerTests/
+    └── GitRunnerManagerTests/
         └── AppPreferencesStoreTests.swift   # XCTest for preferences
 ```
 
@@ -78,7 +78,7 @@ MenuBarExtra ──> MenuPanelView ──> RunnerMenuStore (@Observable, @MainAc
 
 ### Data Flow
 
-1. `GitHubRunnerMenuApp` creates `RunnerMenuStore` with all service dependencies
+1. `GitRunnerManagerApp` creates `RunnerMenuStore` with all service dependencies
 2. `RunnerMenuStore.startMonitoring()` wires up callbacks from all monitors
 3. Monitors push state changes → store reconciles → `@Observable` triggers SwiftUI re-render
 4. Periodic 5-second refresh ensures stale state is corrected
@@ -174,7 +174,7 @@ reconcileState():
 
 | Aspect | Detail |
 |--------|--------|
-| API | `GET /repos/HunKonTech/github-runer-mac/releases/latest` |
+| API | `GET /repos/HunKonTech/GitRunnerManager/releases/latest` |
 | Asset selection | `.macos.zip` or `.dmg` (arm64/x86_64) |
 | Channels | `.stable` (latest), `.preview` (all releases) |
 | States | `idle`, `checking`, `upToDate`, `updateAvailable`, `downloading`, `installing`, `failed` |
@@ -294,7 +294,7 @@ NavigationSplitView (700×500)
 | Battery | IOKit (`IOPSCopyPowerSourcesInfo`) |
 | Network | `NWPathMonitor` (Network framework) |
 | Resources | `ps` command parsing |
-| Logging | `os.Logger` with subsystem `com.koncsik.githubrunnermenu` |
+| Logging | `os.Logger` with subsystem `com.koncsik.gitrunnermanager` |
 | Sleep/Wake | `NSWorkspace.didWakeNotification` |
 
 ## Build Commands
@@ -327,7 +327,7 @@ APP_VERSION=1.0.0 ./scripts/build_dmg_swfit.sh
 
 ```
 Avalonia/
-├── GitHubRunnerTray.sln
+├── GitRunnerManager.sln
 ├── README.md
 ├── scripts/
 │   ├── build.sh
@@ -340,8 +340,8 @@ Avalonia/
 │   ├── macos-arm64/
 │   └── win-x64/
 └── src/
-    ├── GitHubRunnerTray.Core/        # Domain layer (interfaces, models, services)
-    │   ├── GitHubRunnerTray.Core.csproj
+    ├── GitRunnerManager.Core/        # Domain layer (interfaces, models, services)
+    │   ├── GitRunnerManager.Core.csproj
     │   ├── Interfaces/Interfaces.cs
     │   ├── Localization/LocalizationKeys.cs
     │   ├── Models/RunnerModels.cs
@@ -350,8 +350,8 @@ Avalonia/
     │       ├── RunnerLogParser.cs
     │       └── RunnerTrayStore.cs
     │
-    ├── GitHubRunnerTray.Platform/    # Platform-specific implementations
-    │   ├── GitHubRunnerTray.Platform.csproj
+    ├── GitRunnerManager.Platform/    # Platform-specific implementations
+    │   ├── GitRunnerManager.Platform.csproj
     │   ├── Properties/AssemblyInfo.cs
     │   └── Services/
     │       ├── AppUpdateService.cs
@@ -362,8 +362,8 @@ Avalonia/
     │       ├── ResourceMonitor.cs
     │       └── RunnerController.cs
     │
-    ├── GitHubRunnerTray.App/         # Main UI application
-    │   ├── GitHubRunnerTray.App.csproj
+    ├── GitRunnerManager.App/         # Main UI application
+    │   ├── GitRunnerManager.App.csproj
     │   ├── Program.cs
     │   ├── App.axaml / App.axaml.cs
     │   ├── MainWindow.cs
@@ -380,8 +380,8 @@ Avalonia/
     │       ├── TrayPaused.png
     │       └── TrayWaiting.png
     │
-    └── GitHubRunnerTray.Tests/       # Unit tests (xUnit)
-        ├── GitHubRunnerTray.Tests.csproj
+    └── GitRunnerManager.Tests/       # Unit tests (xUnit)
+        ├── GitRunnerManager.Tests.csproj
         ├── PreferencesStoreTests.cs
         ├── ResourceMonitorTests.cs
         └── RunnerLogParserTests.cs
@@ -391,17 +391,17 @@ Avalonia/
 
 ```
                     ┌──────────────────────────────────┐
-                    │   GitHubRunnerTray.App            │
+                    │   GitRunnerManager.App            │
                     │   (Windows, Tray, DI setup)       │
                     └──────────────┬───────────────────┘
                                    │ references
                     ┌──────────────▼───────────────────┐
-                    │   GitHubRunnerTray.Platform       │
+                    │   GitRunnerManager.Platform       │
                     │   (OS-specific implementations)   │
                     └──────────────┬───────────────────┘
                                    │ references
                     ┌──────────────▼───────────────────┐
-                    │   GitHubRunnerTray.Core           │
+                    │   GitRunnerManager.Core           │
                     │   (Interfaces, Models, Domain)    │
                     └──────────────────────────────────┘
 ```
@@ -409,13 +409,13 @@ Avalonia/
 ### Dependency Graph
 
 ```
-GitHubRunnerTray.App
-├── GitHubRunnerTray.Core
+GitRunnerManager.App
+├── GitRunnerManager.Core
 │   ├── CommunityToolkit.Mvvm
 │   ├── Microsoft.Extensions.DependencyInjection.Abstractions
 │   └── Microsoft.Extensions.Hosting.Abstractions
-├── GitHubRunnerTray.Platform
-│   ├── GitHubRunnerTray.Core
+├── GitRunnerManager.Platform
+│   ├── GitRunnerManager.Core
 │   ├── Microsoft.Extensions.DependencyInjection.Abstractions
 │   └── System.Management (Windows WMI)
 └── Direct packages
@@ -548,15 +548,15 @@ Persisted as JSON to platform-specific location:
 
 | Platform | Path |
 |----------|------|
-| macOS | `~/Library/Application Support/GitHubRunnerTray/settings.json` |
-| Windows | `%APPDATA%/GitHubRunnerTray/settings.json` |
-| Linux | `~/.config/GitHubRunnerTray/settings.json` |
+| macOS | `~/Library/Application Support/GitRunnerManager/settings.json` |
+| Windows | `%APPDATA%/GitRunnerManager/settings.json` |
+| Linux | `~/.config/GitRunnerManager/settings.json` |
 
 ### 8. App Update Service (`AppUpdateService.cs`)
 
 | Aspect | Detail |
 |--------|--------|
-| API | `GET /repos/HunKonTech/github-runer-mac/releases` |
+| API | `GET /repos/HunKonTech/GitRunnerManager/releases` |
 | Channels | `Stable` (latest), `Preview` (all) |
 | Asset matching | Platform-specific (win-x64, osx-arm64, linux-x64) |
 | Download | HTTP download + open installer |
@@ -676,7 +676,7 @@ Simple dialog with version and author info.
 | Tray Icon | All | Avalonia `TrayIcon` API |
 | Pointer Location | macOS | CoreGraphics P/Invoke |
 
-## Tests (`GitHubRunnerTray.Tests/`)
+## Tests (`GitRunnerManager.Tests/`)
 
 | Test File | Coverage |
 |-----------|----------|

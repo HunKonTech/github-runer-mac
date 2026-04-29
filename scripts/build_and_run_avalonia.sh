@@ -4,10 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/.."
 AVALONIA_DIR="$PROJECT_DIR/Avalonia"
-APP_NAME="GitHubRunnerTray"
-BUNDLE_ID="com.githubrunnertray.app"
+APP_NAME="GitRunnerManager"
+BUNDLE_ID="com.koncsik.gitrunnermanager"
 
-echo "=== Building GitHubRunnerTray for macOS ==="
+echo "=== Building GitRunnerManager for macOS ==="
 
 cd "$AVALONIA_DIR"
 
@@ -16,7 +16,7 @@ dotnet restore
 
 echo "Building for macOS arm64..."
 rm -rf ./publish/macos
-dotnet publish src/GitHubRunnerTray.App/GitHubRunnerTray.App.csproj \
+dotnet publish src/GitRunnerManager.App/GitRunnerManager.App.csproj \
   -c Release \
   -r osx-arm64 \
   --self-contained true \
@@ -31,7 +31,7 @@ rm -rf "$PUBLISH_DIR/$APP_NAME.app"
 mkdir -p "$APP_CONTENTS/MacOS"
 mkdir -p "$APP_CONTENTS/Resources"
 
-cp "$PUBLISH_DIR/GitHubRunnerTray" "$APP_CONTENTS/MacOS/$APP_NAME"
+cp "$PUBLISH_DIR/GitRunnerManager" "$APP_CONTENTS/MacOS/$APP_NAME"
 chmod +x "$APP_CONTENTS/MacOS/$APP_NAME"
 
 cp "$PUBLISH_DIR"/*.dll "$APP_CONTENTS/MacOS/"
@@ -50,8 +50,8 @@ if [ -d "$PUBLISH_DIR/Assets" ]; then
     cp -r "$PUBLISH_DIR/Assets" "$APP_CONTENTS/"
 fi
 
-if [ -d "$AVALONIA_DIR/src/GitHubRunnerTray.App/Assets" ]; then
-    cp -r "$AVALONIA_DIR/src/GitHubRunnerTray.App/Assets" "$APP_CONTENTS/MacOS/"
+if [ -d "$AVALONIA_DIR/src/GitRunnerManager.App/Assets" ]; then
+    cp -r "$AVALONIA_DIR/src/GitRunnerManager.App/Assets" "$APP_CONTENTS/MacOS/"
 fi
 
 cp "$PROJECT_DIR/Assets/app_icon.ico" "$APP_CONTENTS/Resources/"
@@ -62,11 +62,13 @@ cat > "$APP_CONTENTS/Info.plist" << 'EOFPLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>GitHubRunnerTray</string>
+    <string>GitRunnerManager</string>
     <key>CFBundleIdentifier</key>
-    <string>com.githubrunnertray.app</string>
+    <string>com.koncsik.gitrunnermanager</string>
+    <key>CFBundleDisplayName</key>
+    <string>Git runner manager</string>
     <key>CFBundleName</key>
-    <string>GitHubRunnerTray</string>
+    <string>Git runner manager</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

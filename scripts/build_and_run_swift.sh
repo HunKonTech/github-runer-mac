@@ -2,9 +2,9 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-PRODUCT_NAME="GitHubRunnerMenu"
-DISPLAY_NAME="github runer mac"
-BUNDLE_ID="com.koncsik.githubrunnermenu"
+PRODUCT_NAME="GitRunnerManager"
+DISPLAY_NAME="Git runner manager"
+BUNDLE_ID="com.koncsik.gitrunnermanager"
 MIN_SYSTEM_VERSION="14.0"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
@@ -20,7 +20,7 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$PRODUCT_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ICON_FILE="$SWIFT_DIR/Assets/AppIcon.icns"
-BUILD_PRODUCT="GitHubRunner"
+BUILD_PRODUCT="GitRunnerManager"
 
 pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
 

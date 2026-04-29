@@ -15,7 +15,7 @@ BUFFER_API_URL = "https://api.buffer.com"
 DEFAULT_CHANNEL_SERVICE = "twitter"
 DEFAULT_POST_MODE = "shareNow"
 DEFAULT_SCHEDULING_TYPE = "automatic"
-DEFAULT_USER_AGENT = "github-runer-mac-buffer-release/1.0"
+DEFAULT_USER_AGENT = "GitRunnerManager-buffer-release/1.0"
 MAX_POST_LENGTH = 280
 
 
