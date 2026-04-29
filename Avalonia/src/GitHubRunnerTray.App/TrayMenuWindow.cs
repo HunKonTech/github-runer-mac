@@ -73,14 +73,17 @@ public sealed class TrayMenuWindow : Window
         Topmost = true;
         ShowInTaskbar = false;
 
+        Deactivated += OnDeactivated;
         _store.PropertyChanged += OnStorePropertyChanged;
         Build();
     }
 
     public void ShowAsPopover()
     {
+        var wasVisible = IsVisible;
         Show();
-        PositionNearMenuBar();
+        if (!wasVisible)
+            PositionNearMenuBar();
         Activate();
     }
 
@@ -92,6 +95,7 @@ public sealed class TrayMenuWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        Deactivated -= OnDeactivated;
         _store.PropertyChanged -= OnStorePropertyChanged;
         base.OnClosed(e);
     }
@@ -222,29 +226,7 @@ public sealed class TrayMenuWindow : Window
 
     private Control BuildHeader()
     {
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("18,*"),
-            Height = 22
-        };
-
-        var closeButton = new Button
-        {
-            Width = 12,
-            Height = 12,
-            Background = RedBrush,
-            BorderBrush = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        closeButton.Click += (_, _) => Hide();
-        grid.Children.Add(closeButton);
-        Grid.SetColumn(closeButton, 0);
-
-        var title = new TextBlock
+        return new TextBlock
         {
             Text = T(LocalizationKeys.AppName),
             FontSize = 15,
@@ -254,10 +236,6 @@ public sealed class TrayMenuWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxLines = 1
         };
-        grid.Children.Add(title);
-        Grid.SetColumn(title, 1);
-
-        return grid;
     }
 
     private Control BuildAdvancedSection()
@@ -290,7 +268,6 @@ public sealed class TrayMenuWindow : Window
             {
                 _isAdvancedOpen = expander.IsExpanded;
                 Build();
-                PositionNearMenuBar();
             }
         };
 
@@ -536,6 +513,21 @@ public sealed class TrayMenuWindow : Window
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         Dispatcher.UIThread.Post(Build);
+    }
+
+    private void OnDeactivated(object? sender, EventArgs e)
+    {
+        _ = HideAfterDeactivationAsync();
+    }
+
+    private async Task HideAfterDeactivationAsync()
+    {
+        await Task.Delay(180);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (!IsActive && IsVisible)
+                Hide();
+        }, DispatcherPriority.Background);
     }
 
     private static PixelPoint? GetPointerLocation()

@@ -33,6 +33,7 @@ public partial class App : Application
     private AboutWindow? _aboutWindow;
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private TrayIconState? _currentTrayIconState;
+    private DateTimeOffset _lastTrayToggleAt;
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -89,8 +90,8 @@ public partial class App : Application
     private NativeMenu CreateTrayActivationMenu()
     {
         var menu = new NativeMenu();
-        menu.Opening += (_, _) => ShowTrayMenuWindow();
-        menu.NeedsUpdate += (_, _) => ShowTrayMenuWindow();
+        menu.Opening += (_, _) => ToggleTrayMenuWindow();
+        menu.NeedsUpdate += (_, _) => ToggleTrayMenuWindow();
 
         var activationItem = new NativeMenuItem(_localization?.Get(LocalizationKeys.AppName) ?? "github runer mac")
         {
@@ -113,6 +114,12 @@ public partial class App : Application
 
     private void ToggleTrayMenuWindow()
     {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastTrayToggleAt < TimeSpan.FromMilliseconds(250))
+            return;
+
+        _lastTrayToggleAt = now;
+
         if (_trayMenuWindow?.IsVisible == true)
         {
             _trayMenuWindow.Hide();
