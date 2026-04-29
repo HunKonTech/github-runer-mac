@@ -14,8 +14,9 @@ namespace GitHubRunnerTray.App;
 
 public sealed class TrayMenuWindow : Window
 {
-    private const double PopoverWidth = 440;
-    private const double PopoverHeight = 640;
+    private const double PopoverWidth = 390;
+    private const double CollapsedPopoverHeight = 470;
+    private const double ExpandedPopoverHeight = 560;
 
     private static SolidColorBrush Brush(string color) => new(Color.Parse(color));
 
@@ -64,12 +65,7 @@ public sealed class TrayMenuWindow : Window
         _openSettings = openSettings;
         _quit = quit;
 
-        Width = PopoverWidth;
-        Height = PopoverHeight;
-        MinWidth = PopoverWidth;
-        MinHeight = PopoverHeight;
-        MaxWidth = PopoverWidth;
-        MaxHeight = PopoverHeight;
+        ApplyResponsiveSize();
         CanResize = false;
         WindowDecorations = Avalonia.Controls.WindowDecorations.None;
         Background = Brushes.Transparent;
@@ -115,13 +111,15 @@ public sealed class TrayMenuWindow : Window
 
     private void Build()
     {
+        ApplyResponsiveSize();
+
         var root = new Border
         {
             Background = PanelBrush,
             BorderBrush = PanelBorderBrush,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20, 16, 20, 18),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(16, 12, 16, 14),
             ClipToBounds = true,
             Child = new ScrollViewer
             {
@@ -134,27 +132,41 @@ public sealed class TrayMenuWindow : Window
         Content = root;
     }
 
+    private void ApplyResponsiveSize()
+    {
+        var targetHeight = _isAdvancedOpen ? ExpandedPopoverHeight : CollapsedPopoverHeight;
+        var pointer = GetPointerLocation();
+        var screen = pointer.HasValue ? Screens.ScreenFromPoint(pointer.Value) : Screens.Primary;
+        var availableWidth = screen?.WorkingArea.Width - 16 ?? PopoverWidth;
+        var availableHeight = screen?.WorkingArea.Height - 16 ?? targetHeight;
+        var width = Math.Clamp(PopoverWidth, 320, Math.Max(320, availableWidth));
+        var height = Math.Clamp(targetHeight, 360, Math.Max(360, availableHeight));
+
+        Width = width;
+        Height = height;
+        MinWidth = width;
+        MinHeight = height;
+        MaxWidth = width;
+        MaxHeight = height;
+    }
+
     private Control BuildContent()
     {
         var panel = new StackPanel
         {
-            Spacing = 8
+            Spacing = 6
         };
 
-        panel.Children.Add(new TextBlock
-        {
-            Text = T(LocalizationKeys.AppName),
-            FontSize = 17,
-            FontWeight = FontWeight.Bold,
-            Foreground = PrimaryTextBrush
-        });
+        panel.Children.Add(BuildHeader());
 
         panel.Children.Add(new TextBlock
         {
             Text = TrimText(_store.PolicySummary, 64),
-            FontSize = 13,
+            FontSize = 11.5,
             FontWeight = FontWeight.SemiBold,
-            Foreground = SecondaryTextBrush
+            Foreground = SecondaryTextBrush,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1
         });
 
         panel.Children.Add(StatusRow(LocalizationKeys.StatusRunnerTitle, RunnerStatusText(), RunnerColor()));
@@ -208,6 +220,46 @@ public sealed class TrayMenuWindow : Window
         return panel;
     }
 
+    private Control BuildHeader()
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("18,*"),
+            Height = 22
+        };
+
+        var closeButton = new Button
+        {
+            Width = 12,
+            Height = 12,
+            Background = RedBrush,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        closeButton.Click += (_, _) => Hide();
+        grid.Children.Add(closeButton);
+        Grid.SetColumn(closeButton, 0);
+
+        var title = new TextBlock
+        {
+            Text = T(LocalizationKeys.AppName),
+            FontSize = 15,
+            FontWeight = FontWeight.Bold,
+            Foreground = PrimaryTextBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1
+        };
+        grid.Children.Add(title);
+        Grid.SetColumn(title, 1);
+
+        return grid;
+    }
+
     private Control BuildAdvancedSection()
     {
         var expander = new Expander
@@ -215,13 +267,13 @@ public sealed class TrayMenuWindow : Window
             Header = T(LocalizationKeys.AdvancedViewTitle),
             IsExpanded = _isAdvancedOpen,
             Foreground = PrimaryTextBrush,
-            FontSize = 14,
+            FontSize = 12.5,
             FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             Content = new StackPanel
             {
-                Spacing = 6,
-                Margin = new Thickness(28, 6, 0, 0),
+                Spacing = 4,
+                Margin = new Thickness(24, 5, 0, 0),
                 Children =
                 {
                     SmallStatusRow(LocalizationKeys.SettingsAdvancedCPU, $"{_store.ResourceUsage.CpuPercent:0.0}%"),
@@ -235,7 +287,11 @@ public sealed class TrayMenuWindow : Window
         expander.PropertyChanged += (_, e) =>
         {
             if (e.Property.Name == nameof(Expander.IsExpanded))
+            {
                 _isAdvancedOpen = expander.IsExpanded;
+                Build();
+                PositionNearMenuBar();
+            }
         };
 
         return expander;
@@ -248,7 +304,7 @@ public sealed class TrayMenuWindow : Window
         {
             Content = T(LocalizationKeys.ToggleLaunchAtLogin),
             IsChecked = status is LaunchAtLoginStatus.Enabled or LaunchAtLoginStatus.RequiresApproval,
-            FontSize = 16,
+            FontSize = 13,
             FontWeight = FontWeight.SemiBold,
             Foreground = PrimaryTextBrush
         };
@@ -271,14 +327,14 @@ public sealed class TrayMenuWindow : Window
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("26,108,*"),
-            Height = 31
+            ColumnDefinitions = new ColumnDefinitions("22,92,*"),
+            Height = 27
         };
 
         var dot = new TextBlock
         {
             Text = "●",
-            FontSize = 15,
+            FontSize = 12,
             Foreground = color,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -288,7 +344,7 @@ public sealed class TrayMenuWindow : Window
         var title = new TextBlock
         {
             Text = T(titleKey),
-            FontSize = 14,
+            FontSize = 12.5,
             FontWeight = FontWeight.Bold,
             Foreground = PrimaryTextBrush,
             VerticalAlignment = VerticalAlignment.Center,
@@ -300,7 +356,7 @@ public sealed class TrayMenuWindow : Window
         var detail = new TextBlock
         {
             Text = value,
-            FontSize = 14,
+            FontSize = 12.5,
             FontWeight = FontWeight.SemiBold,
             Foreground = SecondaryTextBrush,
             TextAlignment = TextAlignment.Right,
@@ -324,7 +380,7 @@ public sealed class TrayMenuWindow : Window
         var title = new TextBlock
         {
             Text = T(titleKey),
-            FontSize = 12,
+            FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             Foreground = PrimaryTextBrush,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -336,7 +392,7 @@ public sealed class TrayMenuWindow : Window
         var detail = new TextBlock
         {
             Text = value,
-            FontSize = 12,
+            FontSize = 11,
             Foreground = SecondaryTextBrush,
             Margin = new Thickness(12, 0, 0, 0),
             TextAlignment = TextAlignment.Right
@@ -365,11 +421,11 @@ public sealed class TrayMenuWindow : Window
             Foreground = PrimaryTextBrush,
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(8),
-            FontSize = 14,
+            CornerRadius = new CornerRadius(7),
+            FontSize = 12.5,
             FontWeight = FontWeight.SemiBold,
-            Padding = compact ? new Thickness(16, 5) : new Thickness(16, 6),
-            Margin = new Thickness(0, 0, 10, 7)
+            Padding = compact ? new Thickness(12, 4) : new Thickness(13, 5),
+            Margin = new Thickness(0, 0, 8, 6)
         };
 
         button.Click += async (_, _) =>
@@ -395,7 +451,7 @@ public sealed class TrayMenuWindow : Window
         {
             Height = 1,
             Background = DividerBrush,
-            Margin = new Thickness(0, 6)
+            Margin = new Thickness(0, 4)
         };
     }
 
