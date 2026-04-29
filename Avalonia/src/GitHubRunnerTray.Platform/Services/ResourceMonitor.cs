@@ -90,7 +90,7 @@ public class ResourceMonitor : IResourceMonitor
             {
                 ProcessId = pid,
                 ParentProcessId = parentPid,
-                Name = Path.GetFileName(fields[4]),
+                Name = GetUnixProcessName(fields[4], command),
                 CommandLine = command,
                 CpuPercent = cpu,
                 MemoryBytes = rssKb * 1024
@@ -221,6 +221,22 @@ public class ResourceMonitor : IResourceMonitor
         values.Add(current.ToString());
         return values.ToArray();
     }
+
+    private static string GetUnixProcessName(string comm, string commandLine)
+    {
+        var executable = commandLine
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(executable))
+        {
+            var executableName = Path.GetFileName(executable);
+            if (!string.IsNullOrWhiteSpace(executableName))
+                return executableName;
+        }
+
+        return Path.GetFileName(comm);
+    }
 }
 
 public static class ProcessTreeResourceAggregator
@@ -322,14 +338,18 @@ public static class ProcessTreeResourceAggregator
 
     private static bool IsListenerProcess(ProcessResourceInfo process)
     {
+        var commandLine = process.CommandLine ?? string.Empty;
         return string.Equals(process.Name, "Runner.Listener", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(process.Name, "Runner.Listener.exe", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(process.Name, "Runner.Listener.exe", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("Runner.Listener", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsWorkerProcess(ProcessResourceInfo process)
     {
+        var commandLine = process.CommandLine ?? string.Empty;
         return string.Equals(process.Name, "Runner.Worker", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(process.Name, "Runner.Worker.exe", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(process.Name, "Runner.Worker.exe", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("Runner.Worker", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasRunnerDirectory(ProcessResourceInfo process, string runnerDirectory)

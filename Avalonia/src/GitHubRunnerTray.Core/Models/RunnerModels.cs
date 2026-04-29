@@ -173,5 +173,6 @@ public static class PreferenceDefaults
     public const UpdateChannel UpdateChannel = Models.UpdateChannel.Stable;
     public const AppLanguage Language = AppLanguage.System;
     public const bool StopRunnerOnBattery = false;
+    public const bool StopRunnerOnMeteredNetwork = true;
     public const RunnerControlMode ControlMode = RunnerControlMode.Automatic;
 }

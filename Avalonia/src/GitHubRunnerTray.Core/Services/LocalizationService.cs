@@ -93,6 +93,7 @@ public class LocalizationService : ILocalizationService
         .Add(LocalizationKeys.ControlModeForceStopped, "Forced stopped")
         .Add(LocalizationKeys.PolicyAutomaticRun, "In automatic mode the runner may run.")
         .Add(LocalizationKeys.PolicyAutomaticExpensive, "In automatic mode the runner stops on a metered connection.")
+        .Add(LocalizationKeys.PolicyAutomaticExpensiveIgnored, "In automatic mode the runner may run because metered connection pausing is turned off.")
         .Add(LocalizationKeys.PolicyAutomaticOffline, "In automatic mode the runner stops when there is no internet.")
         .Add(LocalizationKeys.PolicyAutomaticUnknown, "In automatic mode the app is still checking the network.")
         .Add(LocalizationKeys.PolicyForceRunning, "Manual override keeps the runner running regardless of network rules.")
@@ -122,7 +123,9 @@ public class LocalizationService : ILocalizationService
         .Add(LocalizationKeys.ErrorRunnerHandling, "Failed to manage the runner: {0}")
         .Add(LocalizationKeys.SettingsStopOnBatteryTitle, "Pause runner on battery")
         .Add(LocalizationKeys.SettingsStopOnBatteryExplanation, "Automatically stop the runner when running on battery power and resume when connected to power.")
-        .Add(LocalizationKeys.SettingsStopOnBatteryUnavailable, "Not available on this device");
+        .Add(LocalizationKeys.SettingsStopOnBatteryUnavailable, "Not available on this device")
+        .Add(LocalizationKeys.SettingsStopOnMeteredNetworkTitle, "Pause runner on metered connections")
+        .Add(LocalizationKeys.SettingsStopOnMeteredNetworkExplanation, "Automatically stop the runner when the active internet connection is metered.");
 
     private static readonly ImmutableDictionary<string, string> _hungarian = ImmutableDictionary<string, string>.Empty
         .Add(LocalizationKeys.AppName, "github runer mac")
@@ -211,6 +214,7 @@ public class LocalizationService : ILocalizationService
         .Add(LocalizationKeys.ControlModeForceStopped, "Kézileg leállítva")
         .Add(LocalizationKeys.PolicyAutomaticRun, "Automatikus módban a runner futhat.")
         .Add(LocalizationKeys.PolicyAutomaticExpensive, "Automatikus módban a runner megáll, mert a kapcsolat korlátos.")
+        .Add(LocalizationKeys.PolicyAutomaticExpensiveIgnored, "Automatikus módban a runner futhat, mert a forgalomkorlátos kapcsolat miatti szüneteltetés ki van kapcsolva.")
         .Add(LocalizationKeys.PolicyAutomaticOffline, "Automatikus módban a runner megáll, mert nincs internet.")
         .Add(LocalizationKeys.PolicyAutomaticUnknown, "Automatikus módban a hálózat vizsgálata folyamatban van.")
         .Add(LocalizationKeys.PolicyForceRunning, "Kézi felülbírálattal fut, a hálózati szabály most nem állítja le.")
@@ -240,7 +244,9 @@ public class LocalizationService : ILocalizationService
         .Add(LocalizationKeys.ErrorRunnerHandling, "Nem sikerült a runner kezelése: {0}")
         .Add(LocalizationKeys.SettingsStopOnBatteryTitle, "Runner szüneteltetése akkumulátoron")
         .Add(LocalizationKeys.SettingsStopOnBatteryExplanation, "Automatikusan leállítja a runnert, amikor akkumulátorról fut, és folytatja, amikor áramforrásra van csatlakoztatva.")
-        .Add(LocalizationKeys.SettingsStopOnBatteryUnavailable, "Nem érhető el ezen az eszközön");
+        .Add(LocalizationKeys.SettingsStopOnBatteryUnavailable, "Nem érhető el ezen az eszközön")
+        .Add(LocalizationKeys.SettingsStopOnMeteredNetworkTitle, "Runner szüneteltetése forgalomkorlátos kapcsolaton")
+        .Add(LocalizationKeys.SettingsStopOnMeteredNetworkExplanation, "Automatikusan leállítja a runnert, amikor az aktív internetkapcsolat forgalomkorlátos.");
 
     private static readonly ImmutableDictionary<string, ImmutableDictionary<string, string>> _catalogs =
         ImmutableDictionary<string, ImmutableDictionary<string, string>>.Empty

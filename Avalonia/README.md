@@ -63,6 +63,11 @@ After publishing, the app will be in `Avalonia/publish/`. Run the executable:
 - **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
 - **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
 
+### Screenshots
+
+![Top Menu](pictures/top_menu.png)
+![Settings Page](pictures/settings_page.png)
+
 ### Technology Stack
 
 - .NET 9
@@ -144,6 +149,11 @@ A publisholás után az alkalmazás az `Avalonia/publish/` mappában lesz. Futta
 - **macOS**: `Avalonia/publish/osx-arm64/publish/GitHubRunnerTray.app/Contents/MacOS/GitHubRunnerTray`
 - **Windows**: `Avalonia/publish/win-x64/publish/GitHubRunnerTray.exe`
 - **Linux**: `Avalonia/publish/linux-x64/publish/GitHubRunnerTray`
+
+### Képernyőképek
+
+![Felső Menü](pictures/top_menu.png)
+![Beállítások Oldal](pictures/settings_page.png)
 
 ### Tech Stack
 

@@ -128,4 +128,7 @@ public static class LocalizationKeys
     public const string SettingsStopOnBatteryTitle = "settingsStopOnBatteryTitle";
     public const string SettingsStopOnBatteryExplanation = "settingsStopOnBatteryExplanation";
     public const string SettingsStopOnBatteryUnavailable = "settingsStopOnBatteryUnavailable";
+    public const string SettingsStopOnMeteredNetworkTitle = "settingsStopOnMeteredNetworkTitle";
+    public const string SettingsStopOnMeteredNetworkExplanation = "settingsStopOnMeteredNetworkExplanation";
+    public const string PolicyAutomaticExpensiveIgnored = "policyAutomaticExpensiveIgnored";
 }

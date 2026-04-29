@@ -71,6 +71,16 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         }
     }
 
+    public bool StopRunnerOnMeteredNetwork
+    {
+        get => _preferencesFactory.Create().StopRunnerOnMeteredNetwork;
+        set
+        {
+            _preferencesFactory.Create().StopRunnerOnMeteredNetwork = value;
+            _ = ReconcileStateAsync("metered network setting changed");
+        }
+    }
+
     public RunnerTrayStore(
         IRunnerControllerFactory controllerFactory,
         IResourceMonitorFactory resourceMonitorFactory,
@@ -315,7 +325,10 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     private async Task ApplyAutomaticDecisionAsync()
     {
-        var decision = NetworkSnapshot.AutomaticDecision;
+        var decision = !StopRunnerOnMeteredNetwork && NetworkSnapshot.Kind == NetworkConditionKind.Expensive
+            ? NetworkDecision.Run
+            : NetworkSnapshot.AutomaticDecision;
+
         switch (decision)
         {
             case NetworkDecision.Run:
@@ -372,7 +385,9 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         RunnerControlMode.Automatic => NetworkSnapshot.Kind switch
         {
             NetworkConditionKind.Unmetered => _localization.Get(LocalizationKeys.PolicyAutomaticRun),
-            NetworkConditionKind.Expensive => _localization.Get(LocalizationKeys.PolicyAutomaticExpensive),
+            NetworkConditionKind.Expensive => StopRunnerOnMeteredNetwork
+                ? _localization.Get(LocalizationKeys.PolicyAutomaticExpensive)
+                : _localization.Get(LocalizationKeys.PolicyAutomaticExpensiveIgnored),
             NetworkConditionKind.Offline => _localization.Get(LocalizationKeys.PolicyAutomaticOffline),
             NetworkConditionKind.Unknown => _localization.Get(LocalizationKeys.PolicyAutomaticUnknown),
             _ => _localization.Get(LocalizationKeys.PolicyAutomaticUnknown)

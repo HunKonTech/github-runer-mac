@@ -58,6 +58,23 @@ public class ResourceMonitorTests
         Assert.Equal((51200L + 102400 + 524288 + 131072) * 1024, usage.TotalMemoryBytes);
     }
 
+    [Fact]
+    public void ParseUnixOutput_RecognizesMacOsTruncatedCommNames()
+    {
+        var output = """
+          100     1   2.0  51200 /Users/test/actio /Users/test/actions-runner/bin/Runner.Listener run
+          101   100   3.0 102400 /Users/test/actio /Users/test/actions-runner/bin/Runner.Worker spawn
+          102   101 181.0 524288 /usr/local/bin/ /usr/local/bin/dotnet build
+        """;
+
+        var usage = ResourceMonitor.ParseUnixOutput(output, "/Users/test/actions-runner");
+
+        Assert.True(usage.IsRunning);
+        Assert.True(usage.IsJobActive);
+        Assert.Equal(3, usage.ProcessCount);
+        Assert.Equal(186, usage.TotalCpuPercent);
+    }
+
     private static ProcessResourceInfo Process(int pid, int parentPid, string name, string commandLine, double cpuPercent, long memoryMb)
     {
         return new ProcessResourceInfo

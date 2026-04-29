@@ -292,6 +292,22 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(stopOnBattery);
         panel.Children.Add(SecondaryText(T(LocalizationKeys.SettingsStopOnBatteryExplanation)));
 
+        var stopOnMeteredNetwork = new CheckBox
+        {
+            Content = T(LocalizationKeys.SettingsStopOnMeteredNetworkTitle),
+            IsChecked = _store?.StopRunnerOnMeteredNetwork == true,
+            FontSize = 18,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = PrimaryTextBrush
+        };
+        stopOnMeteredNetwork.IsCheckedChanged += (_, _) =>
+        {
+            if (_store != null)
+                _store.StopRunnerOnMeteredNetwork = stopOnMeteredNetwork.IsChecked == true;
+        };
+        panel.Children.Add(stopOnMeteredNetwork);
+        panel.Children.Add(SecondaryText(T(LocalizationKeys.SettingsStopOnMeteredNetworkExplanation)));
+
         return Scroll(panel);
     }
 

@@ -25,6 +25,7 @@ public class PreferencesStoreTests : IDisposable
         Assert.Equal(UpdateChannel.Stable, store.UpdateChannel);
         Assert.Equal(RunnerControlMode.Automatic, store.ControlMode);
         Assert.False(store.StopRunnerOnBattery);
+        Assert.True(store.StopRunnerOnMeteredNetwork);
         Assert.False(string.IsNullOrWhiteSpace(store.RunnerDirectory));
     }
 
@@ -37,6 +38,7 @@ public class PreferencesStoreTests : IDisposable
             UpdateChannel = UpdateChannel.Preview,
             ControlMode = RunnerControlMode.ForceStopped,
             StopRunnerOnBattery = true,
+            StopRunnerOnMeteredNetwork = false,
             RunnerDirectory = "/tmp/actions-runner"
         };
 
@@ -46,6 +48,7 @@ public class PreferencesStoreTests : IDisposable
         Assert.Equal(UpdateChannel.Preview, restored.UpdateChannel);
         Assert.Equal(RunnerControlMode.ForceStopped, restored.ControlMode);
         Assert.True(restored.StopRunnerOnBattery);
+        Assert.False(restored.StopRunnerOnMeteredNetwork);
         Assert.Equal("/tmp/actions-runner", restored.RunnerDirectory);
     }
 

@@ -108,6 +108,16 @@ public class PreferencesStore : IPreferencesStore
         }
     }
 
+    public bool StopRunnerOnMeteredNetwork
+    {
+        get => GetBool(PreferenceDefaults.StopRunnerOnMeteredNetwork, "StopRunnerOnMeteredNetwork");
+        set
+        {
+            _settings["StopRunnerOnMeteredNetwork"] = value;
+            Save();
+        }
+    }
+
     private TEnum GetEnum<TEnum>(TEnum defaultValue, string key) where TEnum : struct, Enum
     {
         var str = GetString("", key);

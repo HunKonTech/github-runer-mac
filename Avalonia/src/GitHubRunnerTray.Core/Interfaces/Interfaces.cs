@@ -57,6 +57,7 @@ public interface IPreferencesStore
     bool AutomaticUpdateCheckEnabled { get; set; }
     UpdateChannel UpdateChannel { get; set; }
     bool StopRunnerOnBattery { get; set; }
+    bool StopRunnerOnMeteredNetwork { get; set; }
 }
 
 public interface IPreferencesStoreFactory

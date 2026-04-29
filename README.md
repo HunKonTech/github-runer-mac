@@ -81,6 +81,9 @@ APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 
 The published app will be in the `Avalonia/publish/` folder.
 
+![Top Menu](pictures/top_menu.png)
+![Settings Page](pictures/settings_page.png)
+
 ### Magyar
 
 Az **Avalonia** mappa az alkalmazás C# / .NET 9 + Avalonia UI-val újraírt multiplatform verzióját tartalmazza. Ez a verzió támogatja a Windows, macOS és Linux platformokat.
@@ -103,3 +106,6 @@ APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 ```
 
 A publikált alkalmazás az `Avalonia/publish/` mappában lesz.
+
+![Top Menu](pictures/top_menu.png)
+![Settings Page](pictures/settings_page.png)
