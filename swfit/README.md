@@ -1,4 +1,4 @@
-# Git runner manager
+# GitRunnerManager
 
 ## English
 
