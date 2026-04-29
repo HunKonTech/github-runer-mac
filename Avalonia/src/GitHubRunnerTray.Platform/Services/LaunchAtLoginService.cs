@@ -92,10 +92,10 @@ public class LaunchAtLoginService : ILaunchAtLoginService
                 if (string.IsNullOrWhiteSpace(executablePath))
                     return false;
 
+                var userId = await GetUserIdAsync();
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await RunLaunchctlAsync("bootout", $"gui/{userId}", path);
                 await File.WriteAllTextAsync(path, CreateMacOsLaunchAgentPlist(executablePath));
-                await RunLaunchctlAsync("bootout", $"gui/{await GetUserIdAsync()}", path);
-                await RunLaunchctlAsync("bootstrap", $"gui/{await GetUserIdAsync()}", path);
                 return File.Exists(path);
             }
 
@@ -113,7 +113,10 @@ public class LaunchAtLoginService : ILaunchAtLoginService
 
     private static string CreateMacOsLaunchAgentPlist(string executablePath)
     {
-        var escapedPath = SecurityElement.Escape(executablePath) ?? executablePath;
+        var arguments = CreateMacOsProgramArguments(executablePath)
+            .Select(argument => $"        <string>{SecurityElement.Escape(argument) ?? argument}</string>");
+        var argumentXml = string.Join(Environment.NewLine, arguments);
+
         return $"""
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -123,7 +126,7 @@ public class LaunchAtLoginService : ILaunchAtLoginService
     <string>{MacOsLaunchAgentLabel}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{escapedPath}</string>
+{argumentXml}
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -132,6 +135,30 @@ public class LaunchAtLoginService : ILaunchAtLoginService
 </dict>
 </plist>
 """;
+    }
+
+    private static IReadOnlyList<string> CreateMacOsProgramArguments(string executablePath)
+    {
+        var appBundlePath = FindMacOsAppBundlePath(executablePath);
+        if (!string.IsNullOrWhiteSpace(appBundlePath))
+            return ["/usr/bin/open", appBundlePath];
+
+        return [executablePath];
+    }
+
+    private static string? FindMacOsAppBundlePath(string executablePath)
+    {
+        var directory = new DirectoryInfo(Path.GetDirectoryName(executablePath) ?? "");
+
+        while (directory != null)
+        {
+            if (directory.Extension.Equals(".app", StringComparison.OrdinalIgnoreCase))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     private static async Task<string> GetUserIdAsync()
