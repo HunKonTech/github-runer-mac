@@ -96,6 +96,8 @@ output.json
 *.unityproj
 *.sln
 *.suo
+!Avalonia/GitHubRunnerTray.sln
+!Avalonia/src/**/*.csproj
 
 ### JetBrains
 # JetBrains IDE directory

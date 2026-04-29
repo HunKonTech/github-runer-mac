@@ -14,27 +14,28 @@ A lightweight macOS menu bar app for managing a local GitHub Actions self-hosted
 
 ```
 github-runer-mac/
-├── Package.swift
-├── Sources/GitHubRunnerMenu/
-│   ├── App/GitHubRunnerMenuApp.swift
-│   ├── Models/RunnerModels.swift
-│   ├── Services/
-│   │   ├── RunnerController.swift
-│   │   ├── NetworkConditionMonitor.swift
-│   │   ├── RunnerResourceMonitor.swift
-│   │   ├── BatteryMonitor.swift
-│   │   ├── RunnerLogParser.swift
-│   │   └── AppUpdateService.swift
-│   ├── Settings/
-│   │   ├── SettingsView.swift
-│   │   └── AppPreferencesStore.swift
-│   ├── Stores/RunnerMenuStore.swift
-│   ├── Views/MenuPanelView.swift
-│   └── Support/
-│       ├── AppStrings.swift
-│       ├── Shell.swift
-│       └── SettingsWindowController.swift
-└── tests/GitHubRunnerMenuTests/
+└── swfit/
+    ├── Package.swift
+    ├── Sources/GitHubRunner/
+    │   ├── App/GitHubRunnerMenuApp.swift
+    │   ├── Models/RunnerModels.swift
+    │   ├── Services/
+    │   │   ├── RunnerController.swift
+    │   │   ├── NetworkConditionMonitor.swift
+    │   │   ├── RunnerResourceMonitor.swift
+    │   │   ├── BatteryMonitor.swift
+    │   │   ├── RunnerLogParser.swift
+    │   │   └── AppUpdateService.swift
+    │   ├── Settings/
+    │   │   ├── SettingsView.swift
+    │   │   └── AppPreferencesStore.swift
+    │   ├── Stores/RunnerMenuStore.swift
+    │   ├── Views/MenuPanelView.swift
+    │   └── Support/
+    │       ├── AppStrings.swift
+    │       ├── Shell.swift
+    │       └── SettingsWindowController.swift
+    └── tests/GitHubRunnerTests/
 ```
 
 ## Core Functionality

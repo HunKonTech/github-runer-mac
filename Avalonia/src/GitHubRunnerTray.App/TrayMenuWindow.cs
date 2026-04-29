@@ -222,7 +222,8 @@ public sealed class TrayMenuWindow : Window
                 Children =
                 {
                     SmallStatusRow(LocalizationKeys.SettingsAdvancedCPU, $"{_store.ResourceUsage.CpuPercent:0.0}%"),
-                    SmallStatusRow(LocalizationKeys.SettingsAdvancedMemory, $"{_store.ResourceUsage.MemoryMB:0} MB"),
+                    SmallStatusRow(LocalizationKeys.SettingsAdvancedMemory, FormatMemory(_store.ResourceUsage.TotalMemoryBytes)),
+                    SmallStatusRow(LocalizationKeys.SettingsAdvancedProcesses, _store.ResourceUsage.ProcessCount.ToString()),
                     SmallStatusRow(LocalizationKeys.SettingsAdvancedJobActive, _store.ResourceUsage.IsJobActive ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))
                 }
             }
@@ -328,6 +329,15 @@ public sealed class TrayMenuWindow : Window
         Grid.SetColumn(detail, 1);
 
         return grid;
+    }
+
+    private static string FormatMemory(long bytes)
+    {
+        var mb = bytes / 1024.0 / 1024.0;
+        if (mb >= 1024)
+            return $"{mb / 1024.0:0.0} GB";
+
+        return $"{mb:0} MB";
     }
 
     private Button ActionButton(string key, Func<Task> action, bool prominent = false, bool compact = false)

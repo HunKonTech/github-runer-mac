@@ -87,20 +87,46 @@ public class RunnerSnapshot
     };
 }
 
-public class RunnerResourceUsage
+public class RunnerResourceSnapshot
+{
+    public int? ParentProcessId { get; init; }
+    public double TotalCpuPercent { get; init; }
+    public long TotalMemoryBytes { get; init; }
+    public int ProcessCount { get; init; }
+    public IReadOnlyList<ProcessResourceInfo> Processes { get; init; } = [];
+    public DateTime Timestamp { get; init; } = DateTime.Now;
+    public string? Error { get; init; }
+    public string? Warning { get; init; }
+}
+
+public class RunnerResourceUsage : RunnerResourceSnapshot
 {
     public bool IsRunning { get; init; }
     public bool IsJobActive { get; init; }
-    public double CpuPercent { get; init; }
-    public double MemoryMB { get; init; }
+    public double CpuPercent => TotalCpuPercent;
+    public double MemoryMB => TotalMemoryBytes / 1024.0 / 1024.0;
 
     public static RunnerResourceUsage Zero => new()
     {
         IsRunning = false,
         IsJobActive = false,
-        CpuPercent = 0,
-        MemoryMB = 0
+        ParentProcessId = null,
+        TotalCpuPercent = 0,
+        TotalMemoryBytes = 0,
+        ProcessCount = 0,
+        Processes = [],
+        Timestamp = DateTime.Now
     };
+}
+
+public class ProcessResourceInfo
+{
+    public int ProcessId { get; init; }
+    public int ParentProcessId { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string? CommandLine { get; init; }
+    public double CpuPercent { get; init; }
+    public long MemoryBytes { get; init; }
 }
 
 public class BatterySnapshot

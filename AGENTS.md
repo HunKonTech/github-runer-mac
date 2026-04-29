@@ -21,37 +21,32 @@ The app is designed for a local developer workflow where the runner should react
 ```
 github-runer-mac/
 ├── Assets/                          # App icons and assets
-├── Package.swift                    # Swift Package Manager config
 ├── README.md                       # Project documentation
-├── Sources/GitHubRunnerMenu/
-│   ├── App/
-│   │   └── GitHubRunnerMenuApp.swift    # Main app entry point
-│   ├── Models/
-│   │   └── RunnerModels.swift           # Data models
-│   ├── Services/
-│   │   ├── AppUpdateService.swift       # App update checking
-│   │   ├── NetworkConditionMonitor.swift # Network monitoring
-│   │   ├── RunnerController.swift        # Runner process control
-│   │   ├── RunnerLogParser.swift        # Log parsing
-│   │   └── RunnerResourceMonitor.swift     # CPU/memory monitoring
-│   ├── Settings/
-│   │   ├── AppPreferencesStore.swift    # Preferences storage
-│   │   └── SettingsView.swift           # Settings UI
-│   ├── Stores/
-│   │   └── RunnerMenuStore.swift          # Main state store
-│   ├── Support/
-│   │   ├── AboutWindowController.swift    # About window
-│   │   ├── AboutWindowView.swift
-│   │   ├── AppStrings.swift             # Localization strings
-│   │   ├── SettingsWindowController.swift
-│   │   ├── Shell.swift                 # Shell command execution
-│   │   ├── UpdateWindowController.swift
-│   │   └── UpdateWindowView.swift
-│   └── Views/
-│       ├── AboutWindowView.swift
-│       ├── MenuPanelView.swift            # Menu bar panel
-│       ├── SettingsView.swift
-│       └── UpdateWindowView.swift
+├── swfit/
+│   ├── Package.swift                    # Swift Package Manager config
+│   ├── Sources/GitHubRunner/
+│   │   ├── App/
+│   │   │   └── GitHubRunnerMenuApp.swift    # Main app entry point
+│   │   ├── Models/
+│   │   │   └── RunnerModels.swift           # Data models
+│   │   ├── Services/
+│   │   │   ├── AppUpdateService.swift       # App update checking
+│   │   │   ├── NetworkConditionMonitor.swift # Network monitoring
+│   │   │   ├── RunnerController.swift        # Runner process control
+│   │   │   ├── RunnerLogParser.swift        # Log parsing
+│   │   │   └── RunnerResourceMonitor.swift     # CPU/memory monitoring
+│   │   ├── Settings/
+│   │   │   ├── AppPreferencesStore.swift    # Preferences storage
+│   │   │   └── SettingsView.swift           # Settings UI
+│   │   ├── Stores/
+│   │   │   └── RunnerMenuStore.swift          # Main state store
+│   │   ├── Support/
+│   │   │   ├── AppStrings.swift             # Localization strings
+│   │   │   ├── SettingsWindowController.swift
+│   │   │   └── Shell.swift                 # Shell command execution
+│   │   └── Views/
+│   │       └── MenuPanelView.swift            # Menu bar panel
+│   └── tests/                          # Swift test files
 ├── script/                           # Build scripts
 └── tests/                          # Test files
 ```

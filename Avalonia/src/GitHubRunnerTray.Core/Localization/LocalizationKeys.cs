@@ -54,6 +54,8 @@ public static class LocalizationKeys
     public const string SettingsAdvancedRunnerProcessTitle = "settingsAdvancedRunnerProcessTitle";
     public const string SettingsAdvancedCPU = "settingsAdvancedCPU";
     public const string SettingsAdvancedMemory = "settingsAdvancedMemory";
+    public const string SettingsAdvancedProcesses = "settingsAdvancedProcesses";
+    public const string SettingsAdvancedWarning = "settingsAdvancedWarning";
     public const string SettingsAdvancedJobActive = "settingsAdvancedJobActive";
     public const string SettingsAdvancedLastRefresh = "settingsAdvancedLastRefresh";
     public const string SettingsAboutAppNameTitle = "settingsAboutAppNameTitle";

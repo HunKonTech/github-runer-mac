@@ -438,13 +438,27 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedRunnerProcessTitle, usage.IsRunning ? T(LocalizationKeys.RunnerRunning) : T(LocalizationKeys.RunnerStopped)));
         panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedJobActive, usage.IsJobActive ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo)));
         panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedCPU, $"{usage.CpuPercent:0.0}%"));
-        panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedMemory, $"{usage.MemoryMB:0} MB"));
+        panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedMemory, FormatMemory(usage.TotalMemoryBytes)));
+        panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedProcesses, usage.ProcessCount.ToString()));
+        if (!string.IsNullOrWhiteSpace(usage.Warning))
+            panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedWarning, usage.Warning));
+        if (!string.IsNullOrWhiteSpace(usage.Error))
+            panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedWarning, usage.Error));
         panel.Children.Add(Row(LocalizationKeys.StatusModeTitle, ControlModeText(_store?.ControlMode ?? RunnerControlMode.Automatic)));
         panel.Children.Add(Row(LocalizationKeys.SettingsAdvancedLastRefresh, _store?.LastRefreshTime?.ToString("T") ?? T(LocalizationKeys.UpdateUnknownVersion)));
         panel.Children.Add(Row(LocalizationKeys.SettingsRunnerFolderTitle, _store?.RunnerDirectory ?? ""));
         panel.Children.Add(Button(LocalizationKeys.ButtonRefresh, async () => await (_store?.RefreshNowAsync() ?? Task.CompletedTask)));
 
         return Scroll(panel);
+    }
+
+    private static string FormatMemory(long bytes)
+    {
+        var mb = bytes / 1024.0 / 1024.0;
+        if (mb >= 1024)
+            return $"{mb / 1024.0:0.0} GB";
+
+        return $"{mb:0} MB";
     }
 
     private Control BuildAboutPage()
