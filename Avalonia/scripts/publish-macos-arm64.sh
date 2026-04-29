@@ -14,6 +14,7 @@ dotnet publish src/GitHubRunnerTray.App/GitHubRunnerTray.App.csproj \
   -r osx-arm64 \
   --self-contained true \
   -p:PublishSingleFile=false \
+  -p:Version="$VERSION" \
   -o "./publish/macos-arm64"
 
 echo "Published to ./publish/macos-arm64"

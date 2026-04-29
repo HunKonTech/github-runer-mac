@@ -11,7 +11,7 @@ CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 BUILD_CONFIGURATION="${BUILD_CONFIGURATION:-debug}"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWIFT_DIR="$PROJECT_DIR"
+SWIFT_DIR="$PROJECT_DIR/swfit"
 DIST_DIR="$PROJECT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$PRODUCT_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
@@ -20,16 +20,17 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$PRODUCT_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ICON_FILE="$SWIFT_DIR/Assets/AppIcon.icns"
+BUILD_PRODUCT="GitHubRunner"
 
 pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
 
 swift build --package-path "$SWIFT_DIR" -c "$BUILD_CONFIGURATION" --jobs 1
-BUILD_BINARY="$SWIFT_DIR/.build/$(uname -m)-apple-macosx/$BUILD_CONFIGURATION/$PRODUCT_NAME"
+BUILD_BINARY="$SWIFT_DIR/.build/$(uname -m)-apple-macosx/$BUILD_CONFIGURATION/$BUILD_PRODUCT"
 if [[ ! -x "$BUILD_BINARY" ]]; then
-  BUILD_BINARY="$(find "$SWIFT_DIR/.build" -path "*/$BUILD_CONFIGURATION/$PRODUCT_NAME" -type f -perm -111 | head -n 1)"
+  BUILD_BINARY="$(find "$SWIFT_DIR/.build" -path "*/$BUILD_CONFIGURATION/$BUILD_PRODUCT" -type f -perm -111 | head -n 1)"
 fi
 if [[ -z "$BUILD_BINARY" || ! -x "$BUILD_BINARY" ]]; then
-  echo "error: built executable not found for $PRODUCT_NAME" >&2
+  echo "error: built executable not found for $BUILD_PRODUCT" >&2
   exit 1
 fi
 /usr/bin/iconutil -c icns "$SWIFT_DIR/Assets/AppIcon.iconset" -o "$SWIFT_DIR/Assets/AppIcon.icns"

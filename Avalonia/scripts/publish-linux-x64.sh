@@ -14,6 +14,7 @@ dotnet publish src/GitHubRunnerTray.App/GitHubRunnerTray.App.csproj \
   -r linux-x64 \
   --self-contained true \
   -p:PublishSingleFile=false \
+  -p:Version="$VERSION" \
   -o "./publish/linux-x64"
 
 echo "Published to ./publish/linux-x64"
