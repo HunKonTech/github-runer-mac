@@ -18,11 +18,13 @@ The app is designed for a local developer workflow where the runner should react
 
 ## Project Structure
 
+A projekt két külön megoldást tartalmaz: egy natív SwiftUI macOS alkalmazást (`swfit/` mappa) és egy multiplatform Avalonia alkalmazást (`Avalonia/` mappa).
+
 ```
 github-runer-mac/
-├── Assets/                          # App icons and assets
-├── README.md                       # Project documentation
-├── swfit/
+├── Assets/                          # App ikonok és egyéb asset-ek
+├── README.md                       # Projekt dokumentáció
+├── swfit/                          # Natív SwiftUI macOS megoldás
 │   ├── Package.swift                    # Swift Package Manager config
 │   ├── Sources/GitHubRunner/
 │   │   ├── App/
@@ -47,18 +49,44 @@ github-runer-mac/
 │   │   └── Views/
 │   │       └── MenuPanelView.swift            # Menu bar panel
 │   └── tests/                          # Swift test files
-├── script/                           # Build scripts
-└── tests/                          # Test files
+├── Avalonia/                         # Multiplatform Avalonia megoldás
+│   ├── GitHubRunnerTray.sln               # Visual Studio solution file
+│   ├── README.md                          # Avalonia projekt dokumentáció
+│   ├── scripts/                           # Build és publish scriptek
+│   │   ├── build.sh                       # Build script
+│   │   ├── publish-linux-x64.sh           # Linux x64 publish
+│   │   ├── publish-macos-arm64.sh         # macOS ARM64 publish
+│   │   └── publish-windows-x64.sh         # Windows x64 publish
+│   └── src/
+│       ├── GitHubRunnerTray.App/          # Main application project
+│       ├── GitHubRunnerTray.Core/         # Core business logic
+│       ├── GitHubRunnerTray.Platform/     # Platform-specific code
+│       └── GitHubRunnerTray.Tests/        # Unit tests
+├── scripts/                          # Közös build és utility scriptek
+│   ├── build_and_run_avalonia.sh          # Avalonia build és futtatás
+│   ├── build_and_run_swift.sh             # Swift build és futtatás
+│   ├── build_dmg_swfit.sh                 # DMG készítés Swift app-hoz
+│   ├── generate_icon.swift                # Ikon generáló script
+│   └── post_buffer_release.py             # Release buffer script
+└── tests/                          # Közös test fájlok
 ```
 
 ## Technology Stack
 
+### Swift (Native macOS)
 - **Language**: Swift 6.0
 - **Platform**: macOS 14.0+
 - **Package Manager**: Swift Package Manager
 - **UI Framework**: SwiftUI (MenuBarExtra)
 - **State Management**: @Observable, @MainActor
 - **Architecture Pattern**: Clean Architecture with Services, Stores, Models, Views
+
+### Avalonia (Multiplatform)
+- **Language**: C#
+- **Platform**: macOS, Windows, Linux
+- **Package Manager**: NuGet
+- **UI Framework**: Avalonia UI
+- **Solution**: Visual Studio / VS Code compatible
 
 ## Key Technical Decisions
 
@@ -71,14 +99,33 @@ github-runer-mac/
 
 ## Build Commands
 
+### Swift (Native macOS)
 Build the app bundle locally:
 ```bash
-./script/build_and_run.sh --bundle
+./scripts/build_and_run_swift.sh --bundle
 ```
 
 Create DMG:
 ```bash
-APP_VERSION=1.0.0 ./script/build_dmg.sh
+APP_VERSION=1.0.0 ./scripts/build_dmg_swfit.sh
+```
+
+### Avalonia (Multiplatform)
+Build and run:
+```bash
+./scripts/build_and_run_avalonia.sh
+```
+
+Build Avalonia (from Avalonia/scripts/):
+```bash
+./scripts/build.sh
+```
+
+Platform-specific publish (from Avalonia/scripts/):
+```bash
+./scripts/publish-macos-arm64.sh
+./scripts/publish-linux-x64.sh
+./scripts/publish-windows-x64.sh
 ```
 
 ## Code Style Requirements
