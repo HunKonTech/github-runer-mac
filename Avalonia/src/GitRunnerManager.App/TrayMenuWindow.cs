@@ -41,6 +41,7 @@ public sealed class TrayMenuWindow : Window
     private readonly Action _quit;
     private bool _isUpdatingLaunchAtLogin;
     private bool _isAdvancedOpen;
+    private bool _isBuildQueued;
 
     public TrayMenuWindow(
         RunnerTrayStore store,
@@ -572,7 +573,16 @@ public sealed class TrayMenuWindow : Window
 
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Dispatcher.UIThread.Post(Build);
+        if (!IsVisible || _isBuildQueued)
+            return;
+
+        _isBuildQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _isBuildQueued = false;
+            if (IsVisible)
+                Build();
+        }, DispatcherPriority.Background);
     }
 
     private void OnDeactivated(object? sender, EventArgs e)

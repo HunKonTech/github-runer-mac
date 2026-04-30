@@ -139,6 +139,15 @@ public static class LocalizationKeys
     public const string GitHubAccountsPlaceholder = "githubAccountsPlaceholder";
     public const string GitHubSetupInstructionsTitle = "githubSetupInstructionsTitle";
     public const string GitHubSetupInstructionsBody = "githubSetupInstructionsBody";
+    public const string GitHubOAuthAppValuesTitle = "githubOAuthAppValuesTitle";
+    public const string GitHubOAuthApplicationName = "githubOAuthApplicationName";
+    public const string GitHubOAuthHomepageUrl = "githubOAuthHomepageUrl";
+    public const string GitHubOAuthCallbackUrl = "githubOAuthCallbackUrl";
+    public const string GitHubOAuthDeviceFlow = "githubOAuthDeviceFlow";
+    public const string GitHubOAuthApplicationNameValue = "githubOAuthApplicationNameValue";
+    public const string GitHubOAuthHomepageUrlValue = "githubOAuthHomepageUrlValue";
+    public const string GitHubOAuthCallbackUrlValue = "githubOAuthCallbackUrlValue";
+    public const string GitHubOAuthDeviceFlowValue = "githubOAuthDeviceFlowValue";
     public const string GitHubOAuthClientIdTitle = "githubOAuthClientIdTitle";
     public const string GitHubSignInButton = "githubSignInButton";
     public const string GitHubSignOutButton = "githubSignOutButton";

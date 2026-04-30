@@ -65,6 +65,8 @@ public sealed class SettingsWindow : Window
     private string _gitHubRunnerName = Environment.MachineName;
     private string _gitHubRunnerDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "actions-runner");
     private string _gitHubLabels = "self-hosted";
+    private readonly Button[] _sidebarButtons = new Button[7];
+    private bool _isPageRefreshQueued;
 
     public SettingsWindow()
     {
@@ -157,6 +159,26 @@ public sealed class SettingsWindow : Window
         };
     }
 
+    private void SelectSection(int index)
+    {
+        if (_selectedSection == index)
+            return;
+
+        _selectedSection = index;
+        UpdateSidebarSelection();
+        BuildSelectedPage();
+    }
+
+    private void UpdateSidebarSelection()
+    {
+        for (var index = 0; index < _sidebarButtons.Length; index++)
+        {
+            var button = _sidebarButtons[index];
+            if (button != null)
+                button.Background = index == _selectedSection ? SelectedBrush : Brushes.Transparent;
+        }
+    }
+
     private Border BuildSidebar()
     {
         var items = new StackPanel
@@ -227,11 +249,8 @@ public sealed class SettingsWindow : Window
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             CornerRadius = new CornerRadius(10)
         };
-        button.Click += (_, _) =>
-        {
-            _selectedSection = index;
-            BuildShell();
-        };
+        button.Click += (_, _) => SelectSection(index);
+        _sidebarButtons[index] = button;
 
         return button;
     }
@@ -559,6 +578,11 @@ public sealed class SettingsWindow : Window
         var panel = Page(LocalizationKeys.SettingsGitHubAccountsTitle);
         panel.Children.Add(Label(LocalizationKeys.GitHubSetupInstructionsTitle));
         panel.Children.Add(SecondaryText(T(LocalizationKeys.GitHubSetupInstructionsBody)));
+        panel.Children.Add(Label(LocalizationKeys.GitHubOAuthAppValuesTitle));
+        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthApplicationName, T(LocalizationKeys.GitHubOAuthApplicationNameValue)));
+        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthHomepageUrl, T(LocalizationKeys.GitHubOAuthHomepageUrlValue)));
+        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthCallbackUrl, T(LocalizationKeys.GitHubOAuthCallbackUrlValue)));
+        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthDeviceFlow, T(LocalizationKeys.GitHubOAuthDeviceFlowValue)));
         var setupButtons = ButtonRow();
         setupButtons.Children.Add(LinkButton("GitHub Developer Settings", "https://github.com/settings/developers"));
         setupButtons.Children.Add(LinkButton(LocalizationKeys.ButtonOpenReleasePage, "https://docs.github.com/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"));
@@ -642,7 +666,7 @@ public sealed class SettingsWindow : Window
             return;
 
         _gitHubAccount = await _gitHubService.GetAccountAsync();
-        Dispatcher.UIThread.Post(BuildSelectedPage);
+        QueueSelectedPageRefresh();
     }
 
     private async Task SignInGitHubAsync()
@@ -1142,6 +1166,46 @@ public sealed class SettingsWindow : Window
 
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Dispatcher.UIThread.Post(BuildSelectedPage);
+        if (ShouldRefreshForStoreChange(e.PropertyName))
+            QueueSelectedPageRefresh();
+    }
+
+    private bool ShouldRefreshForStoreChange(string? propertyName)
+    {
+        if (!IsVisible)
+            return false;
+
+        return _selectedSection switch
+        {
+            1 => propertyName is nameof(RunnerTrayStore.Runners)
+                or nameof(RunnerTrayStore.RunnerSnapshot)
+                or nameof(RunnerTrayStore.ResourceUsage)
+                or nameof(RunnerTrayStore.LastRefreshTime)
+                or nameof(RunnerTrayStore.LastErrorMessage),
+            4 => propertyName is nameof(RunnerTrayStore.NetworkSnapshot)
+                or nameof(RunnerTrayStore.ControlMode)
+                or nameof(RunnerTrayStore.Runners),
+            5 => propertyName is nameof(RunnerTrayStore.Runners)
+                or nameof(RunnerTrayStore.RunnerSnapshot)
+                or nameof(RunnerTrayStore.ResourceUsage)
+                or nameof(RunnerTrayStore.ControlMode)
+                or nameof(RunnerTrayStore.LastRefreshTime)
+                or nameof(RunnerTrayStore.LastErrorMessage),
+            _ => false
+        };
+    }
+
+    private void QueueSelectedPageRefresh()
+    {
+        if (_isPageRefreshQueued)
+            return;
+
+        _isPageRefreshQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _isPageRefreshQueued = false;
+            if (IsVisible)
+                BuildSelectedPage();
+        }, DispatcherPriority.Background);
     }
 }
