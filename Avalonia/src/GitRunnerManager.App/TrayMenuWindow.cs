@@ -573,7 +573,7 @@ public sealed class TrayMenuWindow : Window
 
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!IsVisible || _isBuildQueued)
+        if (_isBuildQueued)
             return;
 
         _isBuildQueued = true;

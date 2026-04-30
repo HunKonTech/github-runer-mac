@@ -21,9 +21,9 @@ def test_render_post_text_stays_within_limit():
     )
 
     assert "ExampleApp v1.2.3" in text
-    assert "Manage your local GitHub Actions self-hosted runner from the macOS menu bar" in text
-    assert "A helyi GitHub runner kezelése a macOS menüsorból." in text
-    assert "#GitHubActions #macOS #automatization" in text
+    assert "Manage your local GitHub Actions self-hosted runner across platforms" in text
+    assert "A helyi GitHub runner kezelése több platformon." in text
+    assert "#GitHubActions #SelfHostedRunner #DesktopApp" in text
     assert "Download / Letöltés:" in text
     assert "https://github.com/org/repo/releases/tag/v1.2.3" in text
     assert len(text) <= 280

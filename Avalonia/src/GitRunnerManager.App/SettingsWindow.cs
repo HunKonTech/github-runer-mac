@@ -1166,8 +1166,12 @@ public sealed class SettingsWindow : Window
 
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (ShouldRefreshForStoreChange(e.PropertyName))
-            QueueSelectedPageRefresh();
+        var propertyName = e.PropertyName;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ShouldRefreshForStoreChange(propertyName))
+                QueueSelectedPageRefresh();
+        }, DispatcherPriority.Background);
     }
 
     private bool ShouldRefreshForStoreChange(string? propertyName)

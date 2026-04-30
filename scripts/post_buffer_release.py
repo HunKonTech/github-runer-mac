@@ -134,22 +134,22 @@ def render_post_text(
             hashtagify_app_name(app_name),
             "#GitHubActions",
             "#SelfHostedRunner",
-            "#macOSApp",
+            "#DesktopApp",
         ]
     )
     english_long = (
-        "A lightweight macOS menu bar app to manage your local GitHub Actions self-hosted runner.\n\n"
+        "A lightweight desktop tray/menu bar app to manage your local GitHub Actions self-hosted runner across platforms.\n\n"
         "Monitor status, control start/stop, and keep it running smoothly — all without opening Terminal."
     )
     hungarian_long = (
-        "Egy könnyű macOS menüsor alkalmazás a helyi GitHub Actions self-hosted runner kezelésére.\n\n"
+        "Egy könnyű asztali tálca-/menüsor alkalmazás a helyi GitHub Actions self-hosted runner többplatformos kezelésére.\n\n"
         "Figyelheted az állapotát, indíthatod/leállíthatod — mindezt Terminál nélkül."
     )
-    english_short = "Manage your local GitHub Actions self-hosted runner from the macOS menu bar."
-    english_compact = "Manage your local GitHub Actions self-hosted runner from the macOS menu bar"
-    hungarian_short = "A helyi GitHub Actions self-hosted runner kezelése a macOS menüsorból."
-    hungarian_compact = "A helyi GitHub runner kezelése a macOS menüsorból."
-    compact_hashtags = "#GitHubActions #macOS #automatization"
+    english_short = "Manage your local GitHub Actions self-hosted runner from the desktop tray/menu bar."
+    english_compact = "Manage your local GitHub Actions self-hosted runner across platforms"
+    hungarian_short = "A helyi GitHub Actions self-hosted runner kezelése asztali tálcáról vagy menüsorból."
+    hungarian_compact = "A helyi GitHub runner kezelése több platformon."
+    compact_hashtags = "#GitHubActions #SelfHostedRunner #DesktopApp"
 
     if template:
         text = template.format(
