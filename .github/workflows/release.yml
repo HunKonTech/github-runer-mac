@@ -191,6 +191,16 @@ jobs:
         shell: bash
         run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" ./scripts/build_dmg_swfit.sh
 
+      - name: Check artifact upload connectivity
+        if: ${{ contains(needs.pick-runners.outputs.mac_runner, 'self-hosted') }}
+        shell: bash
+        run: |
+          for host in results-receiver.actions.githubusercontent.com github.com api.github.com codeload.github.com; do
+            echo "Checking $host"
+            dscacheutil -q host -a name "$host" >/dev/null
+            curl --silent --show-error --head --max-time 15 "https://$host" >/dev/null
+          done
+
       - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4
         with:
@@ -227,6 +237,16 @@ jobs:
           mkdir -p release
           tar -czf "release/GitRunnerManager-Avalonia-macOS-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/macos-arm64 .
         working-directory: Avalonia
+
+      - name: Check artifact upload connectivity
+        if: ${{ contains(needs.pick-runners.outputs.mac_runner, 'self-hosted') }}
+        shell: bash
+        run: |
+          for host in results-receiver.actions.githubusercontent.com github.com api.github.com codeload.github.com; do
+            echo "Checking $host"
+            dscacheutil -q host -a name "$host" >/dev/null
+            curl --silent --show-error --head --max-time 15 "https://$host" >/dev/null
+          done
 
       - name: Upload Avalonia macOS artifact
         uses: actions/upload-artifact@v4
