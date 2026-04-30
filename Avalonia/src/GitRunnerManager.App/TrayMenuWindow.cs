@@ -38,6 +38,7 @@ public sealed class TrayMenuWindow : Window
     private readonly Func<Task> _automaticMode;
     private readonly Func<Task> _refresh;
     private readonly Action _openSettings;
+    private readonly Action _openActionsDashboard;
     private readonly Action _quit;
     private bool _isUpdatingLaunchAtLogin;
     private bool _isAdvancedOpen;
@@ -52,6 +53,7 @@ public sealed class TrayMenuWindow : Window
         Func<Task> automaticMode,
         Func<Task> refresh,
         Action openSettings,
+        Action openActionsDashboard,
         Action quit)
     {
         _store = store;
@@ -62,6 +64,7 @@ public sealed class TrayMenuWindow : Window
         _automaticMode = automaticMode;
         _refresh = refresh;
         _openSettings = openSettings;
+        _openActionsDashboard = openActionsDashboard;
         _quit = quit;
 
         ApplyResponsiveSize();
@@ -204,6 +207,12 @@ public sealed class TrayMenuWindow : Window
         {
             Hide();
             _openSettings();
+            return Task.CompletedTask;
+        }));
+        panel.Children.Add(ActionButton(LocalizationKeys.ButtonOpenActionsDashboard, () =>
+        {
+            Hide();
+            _openActionsDashboard();
             return Task.CompletedTask;
         }));
 

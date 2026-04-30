@@ -3,8 +3,12 @@ using GitRunnerManager.Core.Interfaces;
 
 namespace GitRunnerManager.Platform.Services;
 
-public class CredentialStore : ICredentialStore
+public class CredentialStore : ICredentialStore, IGitHubTokenStore
 {
+    public Task<string?> GetTokenAsync() => GetGitHubTokenAsync();
+    public Task SaveTokenAsync(string token) => SaveGitHubTokenAsync(token);
+    public Task DeleteTokenAsync() => DeleteGitHubTokenAsync();
+
     private const string Service = "GitRunnerManager";
     private const string Account = "GitHubOAuthToken";
 

@@ -28,11 +28,15 @@ public partial class App : Application
     private IAppUpdateService? _updateService;
     private IRunnerUpdateService? _runnerUpdateService;
     private IGitHubService? _gitHubService;
+    private IGitHubAuthService? _gitHubAuthService;
+    private IGitHubActionsService? _gitHubActionsService;
+    private IGitHubTokenStore? _gitHubTokenStore;
     private ILaunchAtLoginService? _launchAtLoginService;
     private TrayIcon? _trayIcon;
     private TrayMenuWindow? _trayMenuWindow;
     private InitializingTrayWindow? _initializingTrayWindow;
     private SettingsWindow? _settingsWindow;
+    private ActionsDashboardWindow? _actionsDashboardWindow;
     private AboutWindow? _aboutWindow;
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private TrayIconState? _currentTrayIconState;
@@ -62,7 +66,11 @@ public partial class App : Application
             _localization.CurrentLanguage = _preferences.Language;
             _updateService = new AppUpdateService(_prefsFactory);
             _runnerUpdateService = new RunnerUpdateService();
-            _gitHubService = new GitHubService(new CredentialStore());
+            var credentialStore = new CredentialStore();
+            _gitHubTokenStore = credentialStore;
+            _gitHubService = new GitHubService(credentialStore);
+            _gitHubAuthService = (IGitHubAuthService)_gitHubService;
+            _gitHubActionsService = new GitHubActionsApiClient(_gitHubTokenStore, _gitHubAuthService);
             _launchAtLoginService = new LaunchAtLoginServiceFactory().Create();
 
             CreateTrayIcon();
@@ -223,6 +231,7 @@ public partial class App : Application
                 () => RunRunnerActionAsync(() => _store?.SetAutomaticModeAsync() ?? Task.CompletedTask),
                 () => RunRunnerActionAsync(() => _store?.RefreshNowAsync() ?? Task.CompletedTask),
                 ShowSettingsWindow,
+                ShowActionsDashboardWindow,
                 QuitApp
             );
             _trayMenuWindow.Closed += (_, _) => _trayMenuWindow = null;
@@ -254,6 +263,19 @@ public partial class App : Application
         }
         _settingsWindow.Show();
         _settingsWindow.Activate();
+    }
+
+    private void ShowActionsDashboardWindow()
+    {
+        if (_actionsDashboardWindow == null)
+        {
+            var viewModel = new ActionsDashboardViewModel(_store!, _preferences!, _gitHubAuthService!, _gitHubActionsService!, _localization!);
+            _actionsDashboardWindow = new ActionsDashboardWindow(viewModel, _localization!);
+            _actionsDashboardWindow.Closed += (_, _) => _actionsDashboardWindow = null;
+        }
+
+        _actionsDashboardWindow.Show();
+        _actionsDashboardWindow.Activate();
     }
 
     private void ShowAboutWindow()

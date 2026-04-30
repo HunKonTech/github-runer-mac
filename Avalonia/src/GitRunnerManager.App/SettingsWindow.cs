@@ -578,8 +578,8 @@ public sealed class SettingsWindow : Window
     private Control BuildGitHubAccountsPage()
     {
         var panel = Page(LocalizationKeys.SettingsGitHubAccountsTitle);
-        panel.Children.Add(Label(LocalizationKeys.GitHubSetupInstructionsTitle));
-        panel.Children.Add(SecondaryText(T(LocalizationKeys.GitHubSetupInstructionsBody)));
+        panel.Children.Add(Label(LocalizationKeys.ActionsDashboardTitle));
+        panel.Children.Add(SecondaryText(T(LocalizationKeys.ActionsMovedFromSettings)));
         panel.Children.Add(Label(LocalizationKeys.GitHubOAuthAppValuesTitle));
         panel.Children.Add(Row(LocalizationKeys.GitHubOAuthApplicationName, T(LocalizationKeys.GitHubOAuthApplicationNameValue)));
         panel.Children.Add(Row(LocalizationKeys.GitHubOAuthHomepageUrl, T(LocalizationKeys.GitHubOAuthHomepageUrlValue)));
@@ -595,18 +595,6 @@ public sealed class SettingsWindow : Window
             if (_preferences != null)
                 _preferences.GitHubOAuthClientId = value.Trim();
         }));
-
-        panel.Children.Add(Row(LocalizationKeys.UpdateStatusTitle, GitHubAccountText()));
-        if (!string.IsNullOrWhiteSpace(_gitHubDeviceCode))
-            panel.Children.Add(Row(LocalizationKeys.GitHubDeviceCode, _gitHubDeviceCode));
-        panel.Children.Add(SecondaryText(_gitHubStatus));
-
-        var accountButtons = ButtonRow();
-        accountButtons.Children.Add(Button(LocalizationKeys.GitHubSignInButton, async () => await SignInGitHubAsync()));
-        accountButtons.Children.Add(Button(LocalizationKeys.GitHubSignOutButton, async () => await SignOutGitHubAsync(), _gitHubAccount.IsSignedIn));
-        if (!string.IsNullOrWhiteSpace(_gitHubVerificationUri))
-            accountButtons.Children.Add(LinkButton(LocalizationKeys.GitHubOpenDevicePageButton, _gitHubVerificationUri));
-        panel.Children.Add(accountButtons);
 
         panel.Children.Add(Label(LocalizationKeys.GitHubRunnerSetupTitle));
         panel.Children.Add(Label(LocalizationKeys.GitHubRunnerScopeTitle));

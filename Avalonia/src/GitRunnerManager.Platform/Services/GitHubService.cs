@@ -7,7 +7,7 @@ using GitRunnerManager.Core.Models;
 
 namespace GitRunnerManager.Platform.Services;
 
-public class GitHubService : IGitHubService
+public class GitHubService : IGitHubService, IGitHubAuthService
 {
     private readonly ICredentialStore _credentialStore;
     private readonly HttpClient _httpClient;
@@ -84,20 +84,37 @@ public class GitHubService : IGitHubService
 
     public async Task<GitHubAccountSnapshot> GetAccountAsync(CancellationToken cancellationToken = default)
     {
+        return (await GetAccountInfoAsync(cancellationToken)).ToSnapshot();
+    }
+
+    async Task<GitHubAccountInfo> IGitHubAuthService.GetAccountAsync(CancellationToken cancellationToken)
+    {
+        return await GetAccountInfoAsync(cancellationToken);
+    }
+
+    private async Task<GitHubAccountInfo> GetAccountInfoAsync(CancellationToken cancellationToken = default)
+    {
         var token = await _credentialStore.GetGitHubTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
-            return new GitHubAccountSnapshot { IsSignedIn = false };
+            return new GitHubAccountInfo { IsSignedIn = false };
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         var response = await _httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            return new GitHubAccountSnapshot { IsSignedIn = false, Error = response.ReasonPhrase };
+            return new GitHubAccountInfo { IsSignedIn = false, Error = response.ReasonPhrase };
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var user = JsonSerializer.Deserialize<GitHubUserResponse>(json);
-        return new GitHubAccountSnapshot { IsSignedIn = true, Login = user?.Login };
+        return new GitHubAccountInfo
+        {
+            IsSignedIn = true,
+            Login = user?.Login,
+            Name = user?.Name,
+            AvatarUrl = user?.AvatarUrl,
+            HtmlUrl = user?.HtmlUrl
+        };
     }
 
     public Task SignOutAsync()
@@ -223,6 +240,12 @@ internal class GitHubUserResponse
 {
     [JsonPropertyName("login")]
     public string? Login { get; set; }
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+    [JsonPropertyName("avatar_url")]
+    public string? AvatarUrl { get; set; }
+    [JsonPropertyName("html_url")]
+    public string? HtmlUrl { get; set; }
 }
 
 internal class GitHubRegistrationTokenResponse

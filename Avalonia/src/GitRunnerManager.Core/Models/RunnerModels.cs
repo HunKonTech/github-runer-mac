@@ -57,6 +57,116 @@ public class GitHubAccountSnapshot
     public string? Error { get; init; }
 }
 
+public class GitHubAccountInfo
+{
+    public bool IsSignedIn { get; init; }
+    public string? Login { get; init; }
+    public string? Name { get; init; }
+    public string? AvatarUrl { get; init; }
+    public string? HtmlUrl { get; init; }
+    public string? Error { get; init; }
+
+    public GitHubAccountSnapshot ToSnapshot() => new()
+    {
+        IsSignedIn = IsSignedIn,
+        Login = Login,
+        Error = Error
+    };
+}
+
+public enum GitHubOwnerKind
+{
+    User,
+    Organization,
+    Repository,
+    Unknown
+}
+
+public class GitHubOwnerInfo
+{
+    public string Login { get; init; } = string.Empty;
+    public GitHubOwnerKind Kind { get; init; } = GitHubOwnerKind.Unknown;
+}
+
+public class GitHubRepositoryInfo
+{
+    public string Owner { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string HtmlUrl { get; init; } = string.Empty;
+}
+
+public class GitHubRunnerGroupInfo
+{
+    public long? Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public bool AllowsAllRepositories { get; init; }
+    public IReadOnlyList<GitHubRepositoryInfo> SelectedRepositories { get; init; } = [];
+    public bool PermissionDenied { get; init; }
+}
+
+public class GitHubRunnerInfo
+{
+    public long? Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Status { get; init; } = "unknown";
+    public bool Busy { get; init; }
+    public IReadOnlyList<string> Labels { get; init; } = [];
+    public GitHubOwnerInfo Owner { get; init; } = new();
+    public GitHubRepositoryInfo? Repository { get; init; }
+    public GitHubRunnerGroupInfo? Group { get; init; }
+    public string PermissionMessage { get; init; } = string.Empty;
+}
+
+public class GitHubWorkflowRunInfo
+{
+    public long Id { get; init; }
+    public string RepositoryFullName { get; init; } = string.Empty;
+    public string WorkflowName { get; init; } = string.Empty;
+    public string Branch { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string Conclusion { get; init; } = string.Empty;
+    public DateTimeOffset? StartedAt { get; init; }
+    public DateTimeOffset? UpdatedAt { get; init; }
+    public string Actor { get; init; } = string.Empty;
+    public string HtmlUrl { get; init; } = string.Empty;
+    public bool IsRunningOnThisRunner { get; init; }
+    public string JobsUrl { get; init; } = string.Empty;
+
+    public TimeSpan? Duration => StartedAt.HasValue && UpdatedAt.HasValue ? UpdatedAt.Value - StartedAt.Value : null;
+    public bool IsActive => Status is "queued" or "in_progress" or "waiting" or "requested";
+}
+
+public class GitHubWorkflowJobInfo
+{
+    public long Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string Conclusion { get; init; } = string.Empty;
+    public string RunnerName { get; init; } = string.Empty;
+    public DateTimeOffset? StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public string HtmlUrl { get; init; } = string.Empty;
+    public bool IsRunningOnThisRunner { get; init; }
+}
+
+public class GitHubApiPermissionStatus
+{
+    public bool HasWorkflowAccess { get; init; } = true;
+    public bool HasRunnerAdminAccess { get; init; } = true;
+    public bool IsRateLimited { get; init; }
+    public string Message { get; init; } = string.Empty;
+}
+
+public class GitHubDashboardSnapshot
+{
+    public GitHubAccountInfo Account { get; init; } = new();
+    public IReadOnlyList<GitHubRunnerInfo> Runners { get; init; } = [];
+    public IReadOnlyList<GitHubWorkflowRunInfo> WorkflowRuns { get; init; } = [];
+    public GitHubApiPermissionStatus PermissionStatus { get; init; } = new();
+    public DateTimeOffset RefreshedAt { get; init; } = DateTimeOffset.Now;
+}
+
 public class GitHubDeviceFlowStart
 {
     public required string DeviceCode { get; init; }

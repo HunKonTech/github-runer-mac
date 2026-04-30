@@ -81,6 +81,27 @@ public interface ICredentialStore
     Task DeleteGitHubTokenAsync();
 }
 
+public interface IGitHubTokenStore
+{
+    Task<string?> GetTokenAsync();
+    Task SaveTokenAsync(string token);
+    Task DeleteTokenAsync();
+}
+
+public interface IGitHubAuthService
+{
+    Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
+    Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
+    Task<GitHubAccountInfo> GetAccountAsync(CancellationToken cancellationToken = default);
+    Task SignOutAsync();
+}
+
+public interface IGitHubActionsService
+{
+    Task<GitHubDashboardSnapshot> GetDashboardAsync(IReadOnlyList<RunnerConfig> runners, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitHubWorkflowJobInfo>> GetJobsAsync(GitHubWorkflowRunInfo run, CancellationToken cancellationToken = default);
+}
+
 public interface IGitHubService
 {
     Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
