@@ -35,10 +35,11 @@ public sealed class SettingsWindow : Window
         LocalizationKeys.SettingsUpdatesTitle,
         LocalizationKeys.SettingsNetworkTitle,
         LocalizationKeys.SettingsAdvancedTitle,
+        LocalizationKeys.SettingsDeveloperTitle,
         LocalizationKeys.SettingsAboutTitle
     ];
 
-    private readonly string[] _sectionIcons = ["⚙", "▻", "◎", "⇩", "◉", "⚒", "ⓘ"];
+    private readonly string[] _sectionIcons = ["⚙", "▻", "◎", "⇩", "◉", "⚒", "⌘", "ⓘ"];
 
     private ILocalizationService? _localization;
     private RunnerTrayStore? _store;
@@ -65,7 +66,7 @@ public sealed class SettingsWindow : Window
     private string _gitHubRunnerName = Environment.MachineName;
     private string _gitHubRunnerDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "actions-runner");
     private string _gitHubLabels = "self-hosted";
-    private readonly Button[] _sidebarButtons = new Button[7];
+    private readonly Button[] _sidebarButtons = new Button[8];
     private bool _isPageRefreshQueued;
 
     public SettingsWindow()
@@ -154,7 +155,8 @@ public sealed class SettingsWindow : Window
             3 => BuildUpdatesPage(),
             4 => BuildNetworkPage(),
             5 => BuildAdvancedPage(),
-            6 => BuildAboutPage(),
+            6 => BuildDeveloperPage(),
+            7 => BuildAboutPage(),
             _ => BuildGeneralPage()
         };
     }
@@ -853,6 +855,18 @@ public sealed class SettingsWindow : Window
         return Scroll(panel);
     }
 
+    private Control BuildDeveloperPage()
+    {
+        var panel = Page(LocalizationKeys.SettingsDeveloperTitle);
+        var logDirectory = DiagnosticLog.DefaultLogDirectory;
+
+        panel.Children.Add(SecondaryText(T(LocalizationKeys.SettingsDeveloperLogDirectoryDescription)));
+        panel.Children.Add(Row(LocalizationKeys.SettingsDeveloperLogDirectoryTitle, logDirectory));
+        panel.Children.Add(Button(LocalizationKeys.ButtonOpenFolder, () => OpenFolder(logDirectory)));
+
+        return Scroll(panel);
+    }
+
     private async Task CheckForUpdatesAsync()
     {
         if (_updateService == null)
@@ -1092,6 +1106,16 @@ public sealed class SettingsWindow : Window
         Process.Start(new ProcessStartInfo
         {
             FileName = url,
+            UseShellExecute = true
+        });
+    }
+
+    private static void OpenFolder(string path)
+    {
+        Directory.CreateDirectory(path);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = path,
             UseShellExecute = true
         });
     }

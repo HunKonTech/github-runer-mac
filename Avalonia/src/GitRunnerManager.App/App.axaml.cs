@@ -41,6 +41,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Dispatcher.UIThread.UnhandledException += OnDispatcherUnhandledException;
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             _desktop = desktop;
@@ -64,8 +66,10 @@ public partial class App : Application
             _launchAtLoginService = new LaunchAtLoginServiceFactory().Create();
 
             CreateTrayIcon();
-            _ = InitializeRunnerStoreAsync();
+            ObserveBackgroundTask(InitializeRunnerStoreAsync(), "Runner store initialization failed");
         }
+
+        base.OnFrameworkInitializationCompleted();
     }
 
     private async Task InitializeRunnerStoreAsync()
@@ -98,6 +102,32 @@ public partial class App : Application
                 ShowTrayMenuWindow();
             }
         });
+    }
+
+    private void ObserveBackgroundTask(Task task, string message)
+    {
+        _ = task.ContinueWith(failedTask =>
+        {
+            var exception = failedTask.Exception?.GetBaseException();
+            if (exception == null)
+                return;
+
+            DiagnosticLog.WriteException(message, exception);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_store != null && _localization != null)
+                    _store.LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, exception.Message);
+            });
+        }, TaskContinuationOptions.OnlyOnFaulted);
+    }
+
+    private void OnDispatcherUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        DiagnosticLog.WriteException("Unhandled UI dispatcher exception", e.Exception);
+        if (_store != null && _localization != null)
+            _store.LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, e.Exception.Message);
+
+        e.Handled = true;
     }
 
     private void CreateTrayIcon()

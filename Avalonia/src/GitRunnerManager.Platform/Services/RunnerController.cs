@@ -101,9 +101,9 @@ public class RunnerController : IRunnerController
             WorkingDirectory = _runnerDirectory.FullName,
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardInput = false,
+            RedirectStandardOutput = false,
+            RedirectStandardError = false
         };
 
         var env = startInfo.Environment;

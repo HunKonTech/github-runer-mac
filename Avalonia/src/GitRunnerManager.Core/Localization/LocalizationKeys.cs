@@ -55,6 +55,7 @@ public static class LocalizationKeys
     public const string SettingsUpdatesTitle = "settingsUpdatesTitle";
     public const string SettingsNetworkTitle = "settingsNetworkTitle";
     public const string SettingsAdvancedTitle = "settingsAdvancedTitle";
+    public const string SettingsDeveloperTitle = "settingsDeveloperTitle";
     public const string SettingsAboutTitle = "settingsAboutTitle";
     public const string SettingsLanguageTitle = "settingsLanguageTitle";
     public const string LanguageSystemDefault = "languageSystemDefault";
@@ -78,6 +79,8 @@ public static class LocalizationKeys
     public const string SettingsAdvancedWarning = "settingsAdvancedWarning";
     public const string SettingsAdvancedJobActive = "settingsAdvancedJobActive";
     public const string SettingsAdvancedLastRefresh = "settingsAdvancedLastRefresh";
+    public const string SettingsDeveloperLogDirectoryTitle = "settingsDeveloperLogDirectoryTitle";
+    public const string SettingsDeveloperLogDirectoryDescription = "settingsDeveloperLogDirectoryDescription";
     public const string SettingsAboutAppNameTitle = "settingsAboutAppNameTitle";
     public const string SettingsAboutLicenseTitle = "settingsAboutLicenseTitle";
     public const string SettingsAboutLicenseValue = "settingsAboutLicenseValue";
