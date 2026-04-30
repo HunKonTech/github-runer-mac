@@ -24,6 +24,7 @@ class Program
             DiagnosticLog.WriteException("Unobserved task exception", e.Exception);
             e.SetObserved();
         };
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => DiagnosticLog.Write("Application process exiting");
 
         try
         {

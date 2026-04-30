@@ -49,6 +49,31 @@ public class RunnerController : IRunnerController
         var startInfo = CreateProcessStartInfo(runScript);
 
         _managedProcess = Process.Start(startInfo);
+        var process = _managedProcess;
+        if (process != null)
+        {
+            process.EnableRaisingEvents = true;
+            process.OutputDataReceived += (_, _) => { };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data) && e.Data.Contains("error", StringComparison.OrdinalIgnoreCase))
+                    DiagnosticLog.Write($"Runner stderr: {e.Data}");
+            };
+            process.Exited += (_, _) =>
+            {
+                try
+                {
+                    DiagnosticLog.Write($"Runner process exited with code {process.ExitCode}");
+                }
+                catch
+                {
+                    DiagnosticLog.Write("Runner process exited");
+                }
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -102,8 +127,8 @@ public class RunnerController : IRunnerController
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = false,
-            RedirectStandardOutput = false,
-            RedirectStandardError = false
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         var env = startInfo.Environment;

@@ -12,7 +12,7 @@ public class RunnerControllerTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "GitRunnerManagerTests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void CreateProcessStartInfo_DoesNotRedirectOutputPipes()
+    public void CreateProcessStartInfo_RedirectsOutputPipesForAsyncDrain()
     {
         Directory.CreateDirectory(_directory);
         var script = Path.Combine(_directory, OperatingSystem.IsWindows() ? "run.cmd" : "run.sh");
@@ -23,8 +23,8 @@ public class RunnerControllerTests : IDisposable
         var startInfo = Assert.IsType<ProcessStartInfo>(method?.Invoke(controller, [script]));
 
         Assert.False(startInfo.RedirectStandardInput);
-        Assert.False(startInfo.RedirectStandardOutput);
-        Assert.False(startInfo.RedirectStandardError);
+        Assert.True(startInfo.RedirectStandardOutput);
+        Assert.True(startInfo.RedirectStandardError);
     }
 
     public void Dispose()

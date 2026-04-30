@@ -2,6 +2,8 @@ namespace GitRunnerManager.Core.Services;
 
 public static class DiagnosticLog
 {
+    private static readonly object SyncRoot = new();
+
     public static string DefaultLogDirectory => GetLogDirectory();
     public static string DefaultLogPath => Path.Combine(DefaultLogDirectory, "avalonia.log");
 
@@ -30,7 +32,10 @@ public static class DiagnosticLog
         if (exception != null)
             lines.Add(exception.ToString());
 
-        File.AppendAllText(path, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+        lock (SyncRoot)
+        {
+            File.AppendAllText(path, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+        }
     }
 
     private static string GetLogDirectory()

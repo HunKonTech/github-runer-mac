@@ -41,6 +41,14 @@ public class ResourceMonitorTests
     }
 
     [Fact]
+    public void CalculateCpuPercent_UsesSingleCoreAsOneHundredPercent()
+    {
+        var cpu = ResourceMonitor.CalculateCpuPercent(TimeSpan.FromMilliseconds(750), TimeSpan.FromMilliseconds(500));
+
+        Assert.Equal(150, cpu);
+    }
+
+    [Fact]
     public void ParseUnixOutput_SumsRunnerTreeFromPsRows()
     {
         var output = """

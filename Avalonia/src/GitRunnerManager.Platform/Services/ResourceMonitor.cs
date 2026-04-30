@@ -9,6 +9,8 @@ public class ResourceMonitor : IResourceMonitor
 {
     private readonly DirectoryInfo _runnerDirectory;
     private RunnerResourceUsage _lastUsage = RunnerResourceUsage.Zero;
+    private readonly Dictionary<int, TimeSpan> _lastCpuTimes = [];
+    private DateTime _lastCpuSampleTime;
     private bool _stopped;
 
     public ResourceMonitor(DirectoryInfo runnerDirectory)
@@ -62,7 +64,8 @@ public class ResourceMonitor : IResourceMonitor
         if (process.ExitCode != 0)
             return WithWarning(_lastUsage, $"Resource monitoring failed: ps exited with {process.ExitCode}.");
 
-        return ParseUnixOutput(output, _runnerDirectory.FullName);
+        var usage = ParseUnixOutput(output, _runnerDirectory.FullName);
+        return OperatingSystem.IsMacOS() ? ApplySampledCpuUsage(usage) : usage;
     }
 
     internal static RunnerResourceUsage ParseUnixOutput(string output, string runnerDirectory)
@@ -192,6 +195,84 @@ public class ResourceMonitor : IResourceMonitor
             Timestamp = DateTime.Now,
             Warning = warning
         };
+    }
+
+    private RunnerResourceUsage ApplySampledCpuUsage(RunnerResourceUsage usage)
+    {
+        if (!usage.IsRunning || usage.Processes.Count == 0)
+            return usage;
+
+        var now = DateTime.UtcNow;
+        var elapsed = _lastCpuSampleTime == default ? TimeSpan.Zero : now - _lastCpuSampleTime;
+        var sampledProcesses = new List<ProcessResourceInfo>();
+        var activePids = usage.Processes.Select(process => process.ProcessId).ToHashSet();
+
+        foreach (var process in usage.Processes)
+        {
+            var sampledCpu = process.CpuPercent;
+            var hasCpuTime = TryGetProcessCpuTime(process.ProcessId, out var cpuTime);
+            if (hasCpuTime
+                && elapsed > TimeSpan.Zero
+                && _lastCpuTimes.TryGetValue(process.ProcessId, out var previousCpuTime))
+            {
+                sampledCpu = CalculateCpuPercent(cpuTime - previousCpuTime, elapsed);
+            }
+
+            if (hasCpuTime)
+                _lastCpuTimes[process.ProcessId] = cpuTime;
+
+            sampledProcesses.Add(new ProcessResourceInfo
+            {
+                ProcessId = process.ProcessId,
+                ParentProcessId = process.ParentProcessId,
+                Name = process.Name,
+                CommandLine = process.CommandLine,
+                CpuPercent = sampledCpu,
+                MemoryBytes = process.MemoryBytes
+            });
+        }
+
+        foreach (var pid in _lastCpuTimes.Keys.Where(pid => !activePids.Contains(pid)).ToList())
+            _lastCpuTimes.Remove(pid);
+
+        _lastCpuSampleTime = now;
+
+        return new RunnerResourceUsage
+        {
+            IsRunning = usage.IsRunning,
+            IsJobActive = usage.IsJobActive,
+            ParentProcessId = usage.ParentProcessId,
+            TotalCpuPercent = sampledProcesses.Sum(process => process.CpuPercent),
+            TotalMemoryBytes = usage.TotalMemoryBytes,
+            ProcessCount = usage.ProcessCount,
+            Processes = sampledProcesses,
+            Timestamp = DateTime.Now,
+            Error = usage.Error,
+            Warning = usage.Warning
+        };
+    }
+
+    internal static double CalculateCpuPercent(TimeSpan cpuTimeDelta, TimeSpan elapsed)
+    {
+        if (cpuTimeDelta <= TimeSpan.Zero || elapsed <= TimeSpan.Zero)
+            return 0;
+
+        return cpuTimeDelta.TotalMilliseconds / elapsed.TotalMilliseconds * 100;
+    }
+
+    private static bool TryGetProcessCpuTime(int processId, out TimeSpan cpuTime)
+    {
+        cpuTime = TimeSpan.Zero;
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            cpuTime = process.TotalProcessorTime;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string[] SplitCsvLine(string line)
