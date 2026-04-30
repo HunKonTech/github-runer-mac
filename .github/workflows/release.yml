@@ -292,6 +292,43 @@ jobs:
           path: Avalonia/release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
           if-no-files-found: error
 
+  build-avalonia-windows-arm64:
+    name: Build Avalonia Windows ARM64 App
+    needs:
+      - prepare
+      - pick-runners
+    runs-on: ${{ fromJSON(needs.pick-runners.outputs.windows_runner) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Selected Windows runner
+        shell: bash
+        run: echo '${{ needs.pick-runners.outputs.windows_runner }}'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish Avalonia Windows ARM64 app
+        shell: bash
+        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" bash ./scripts/publish-windows-arm64.sh
+        working-directory: Avalonia
+
+      - name: Package Avalonia Windows ARM64 app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Compress-Archive -Path publish/win-arm64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-arm64-${{ needs.prepare.outputs.package_version }}.zip" -Force
+        working-directory: Avalonia
+
+      - name: Upload Avalonia Windows ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-avalonia-windows-arm64
+          path: Avalonia/release/GitRunnerManager-Avalonia-Windows-arm64-${{ needs.prepare.outputs.package_version }}.zip
+          if-no-files-found: error
+
   build-avalonia-linux:
     name: Build Avalonia Linux App
     needs:
@@ -329,6 +366,43 @@ jobs:
           path: Avalonia/release/GitRunnerManager-Avalonia-Linux-x64-${{ needs.prepare.outputs.package_version }}.tar.gz
           if-no-files-found: error
 
+  build-avalonia-linux-arm64:
+    name: Build Avalonia Linux ARM64 App
+    needs:
+      - prepare
+      - pick-runners
+    runs-on: ${{ fromJSON(needs.pick-runners.outputs.linux_runner) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Selected Linux runner
+        shell: bash
+        run: echo '${{ needs.pick-runners.outputs.linux_runner }}'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish Avalonia Linux ARM64 app
+        shell: bash
+        run: APP_VERSION="${{ needs.prepare.outputs.package_version }}" bash ./scripts/publish-linux-arm64.sh
+        working-directory: Avalonia
+
+      - name: Package Avalonia Linux ARM64 app
+        shell: bash
+        run: |
+          mkdir -p release
+          tar -czf "release/GitRunnerManager-Avalonia-Linux-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz" -C publish/linux-arm64 .
+        working-directory: Avalonia
+
+      - name: Upload Avalonia Linux ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-avalonia-linux-arm64
+          path: Avalonia/release/GitRunnerManager-Avalonia-Linux-arm64-${{ needs.prepare.outputs.package_version }}.tar.gz
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
     needs:
@@ -336,8 +410,10 @@ jobs:
       - build-macos
       - build-avalonia-macos
       - build-avalonia-windows
+      - build-avalonia-windows-arm64
       - build-avalonia-linux
-    if: ${{ always() && needs.build-macos.result == 'success' && needs.build-avalonia-macos.result == 'success' && needs.build-avalonia-windows.result == 'success' && needs.build-avalonia-linux.result == 'success' }}
+      - build-avalonia-linux-arm64
+    if: ${{ always() && needs.build-macos.result == 'success' && needs.build-avalonia-macos.result == 'success' && needs.build-avalonia-windows.result == 'success' && needs.build-avalonia-windows-arm64.result == 'success' && needs.build-avalonia-linux.result == 'success' && needs.build-avalonia-linux-arm64.result == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       release_url: ${{ steps.release_url.outputs.url }}
@@ -363,17 +439,21 @@ jobs:
           name: ${{ needs.prepare.outputs.release_name }}
           prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
           body: |
-            Download the native macOS DMG installer or the Avalonia multiplatform builds from the assets below.
+            GitRunnerManager helps you manage a local GitHub Actions self-hosted runner from a desktop tray/menu bar interface.
 
-            The native macOS app is packaged as a drag-to-Applications installer. The Avalonia builds are published for Windows x64, Linux x64, and macOS arm64.
+            This release is no longer macOS-only: download the native macOS DMG installer or the Avalonia multiplatform builds from the assets below.
+
+            The native macOS app is packaged as a drag-to-Applications installer. The Avalonia builds are published for Windows x64, Windows ARM64, Linux x64, Linux ARM64, and macOS arm64.
 
             Note: these builds are ad-hoc signed or unsigned. macOS may ask for confirmation the first time an app is opened.
 
             ---
 
-            Töltsd le a natív macOS DMG telepítőt vagy az Avalonia multiplatform buildeket az alábbi assetek közül.
+            A GitRunnerManagerrel helyi GitHub Actions self-hosted runnert kezelhetsz asztali tálcáról vagy menüsorból.
 
-            A natív macOS alkalmazás behúzható az Applications mappába. Az Avalonia buildek Windows x64, Linux x64 és macOS arm64 platformokra készülnek.
+            Ez a release már nem csak macOS-re készült: töltsd le a natív macOS DMG telepítőt vagy az Avalonia multiplatform buildeket az alábbi assetek közül.
+
+            A natív macOS alkalmazás behúzható az Applications mappába. Az Avalonia buildek Windows x64, Windows ARM64, Linux x64, Linux ARM64 és macOS arm64 platformokra készülnek.
 
             Megjegyzés: ezek a buildek ad-hoc aláírással vagy aláírás nélkül készülnek. A macOS az első indításkor megerősítést kérhet.
 
@@ -386,7 +466,9 @@ jobs:
       - build-macos
       - build-avalonia-macos
       - build-avalonia-windows
+      - build-avalonia-windows-arm64
       - build-avalonia-linux
+      - build-avalonia-linux-arm64
       - release
     if: ${{ needs.release.result == 'success' && github.event_name == 'push' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
@@ -412,4 +494,6 @@ jobs:
             --platform "macOS=${{ needs.build-macos.result }}" \
             --platform "Avalonia macOS=${{ needs.build-avalonia-macos.result }}" \
             --platform "Avalonia Windows=${{ needs.build-avalonia-windows.result }}" \
-            --platform "Avalonia Linux=${{ needs.build-avalonia-linux.result }}"
+            --platform "Avalonia Windows ARM64=${{ needs.build-avalonia-windows-arm64.result }}" \
+            --platform "Avalonia Linux=${{ needs.build-avalonia-linux.result }}" \
+            --platform "Avalonia Linux ARM64=${{ needs.build-avalonia-linux-arm64.result }}"
