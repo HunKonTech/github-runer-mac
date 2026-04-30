@@ -15,8 +15,6 @@ namespace GitRunnerManager.App;
 public sealed class TrayMenuWindow : Window
 {
     private const double PopoverWidth = 390;
-    private const double CollapsedPopoverHeight = 520;
-    private const double ExpandedPopoverHeight = 560;
 
     private static SolidColorBrush Brush(string color) => new(Color.Parse(color));
 
@@ -66,6 +64,7 @@ public sealed class TrayMenuWindow : Window
         _quit = quit;
 
         ApplyResponsiveSize();
+        SizeToContent = SizeToContent.Height;
         CanResize = false;
         WindowDecorations = Avalonia.Controls.WindowDecorations.None;
         Background = Brushes.Transparent;
@@ -129,6 +128,7 @@ public sealed class TrayMenuWindow : Window
             {
                 HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                MaxHeight = Math.Max(280, MaxHeight - 28),
                 Content = BuildContent()
             }
         };
@@ -138,20 +138,17 @@ public sealed class TrayMenuWindow : Window
 
     private void ApplyResponsiveSize()
     {
-        var targetHeight = _isAdvancedOpen ? ExpandedPopoverHeight : CollapsedPopoverHeight;
         var pointer = GetPointerLocation();
         var screen = pointer.HasValue ? Screens.ScreenFromPoint(pointer.Value) : Screens.Primary;
         var availableWidth = screen?.WorkingArea.Width - 16 ?? PopoverWidth;
-        var availableHeight = screen?.WorkingArea.Height - 16 ?? targetHeight;
+        var availableHeight = screen?.WorkingArea.Height - 16 ?? 560;
         var width = Math.Clamp(PopoverWidth, 320, Math.Max(320, availableWidth));
-        var height = Math.Clamp(targetHeight, 360, Math.Max(360, availableHeight));
 
         Width = width;
-        Height = height;
         MinWidth = width;
-        MinHeight = height;
+        MinHeight = 0;
         MaxWidth = width;
-        MaxHeight = height;
+        MaxHeight = Math.Max(320, availableHeight);
     }
 
     private Control BuildContent()
@@ -177,7 +174,7 @@ public sealed class TrayMenuWindow : Window
             panel.Children.Add(BuildRunnerRow(runner));
 
         if (_store.Runners.Count == 0)
-            panel.Children.Add(StatusRow(LocalizationKeys.StatusRunnerTitle, "No runners configured", GrayBrush));
+            panel.Children.Add(StatusRow(LocalizationKeys.StatusRunnerTitle, T(LocalizationKeys.RunnerStatusNoRunners), GrayBrush));
 
         panel.Children.Add(StatusRow(LocalizationKeys.StatusNetworkTitle, _store.NetworkSnapshot.Description, NetworkColor()));
         panel.Children.Add(StatusRow(LocalizationKeys.StatusModeTitle, ControlModeText(_store.ControlMode), GreenBrush));
@@ -191,9 +188,10 @@ public sealed class TrayMenuWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top
         };
-        actions.Children.Add(ActionButton("Start all", () => _store.StartAllAsync(), true));
-        actions.Children.Add(ActionButton("Stop all", () => _store.StopAllAsync()));
-        actions.Children.Add(ActionButton("Refresh all", _refresh));
+        actions.Children.Add(ActionButton(
+            _store.RunnerSnapshot.IsRunning ? LocalizationKeys.ButtonStop : LocalizationKeys.ButtonStart,
+            _store.RunnerSnapshot.IsRunning ? _stopRunner : _startRunner,
+            true));
         actions.Children.Add(ActionButton(LocalizationKeys.ButtonAutomaticMode, _automaticMode));
         panel.Children.Add(actions);
 
@@ -246,7 +244,7 @@ public sealed class TrayMenuWindow : Window
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("22,*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("22,*"),
             Height = 34
         };
 
@@ -272,14 +270,6 @@ public sealed class TrayMenuWindow : Window
         };
         grid.Children.Add(label);
         Grid.SetColumn(label, 1);
-
-        var start = TinyButton("Start", () => _store.StartRunnerAsync(runner.Profile.Id));
-        grid.Children.Add(start);
-        Grid.SetColumn(start, 2);
-
-        var stop = TinyButton("Stop", () => _store.StopRunnerAsync(runner.Profile.Id));
-        grid.Children.Add(stop);
-        Grid.SetColumn(stop, 3);
 
         return grid;
     }
@@ -468,28 +458,6 @@ public sealed class TrayMenuWindow : Window
         return button;
     }
 
-    private Button TinyButton(string text, Func<Task> action)
-    {
-        var button = new Button
-        {
-            Content = text,
-            Background = ButtonBrush,
-            Foreground = PrimaryTextBrush,
-            BorderBrush = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(6),
-            FontSize = 11,
-            Padding = new Thickness(8, 3),
-            Margin = new Thickness(5, 0, 0, 0)
-        };
-        button.Click += async (_, _) =>
-        {
-            await action();
-            Build();
-        };
-        return button;
-    }
-
     private Border Divider()
     {
         return new Border
@@ -509,9 +477,9 @@ public sealed class TrayMenuWindow : Window
     {
         return runner.Snapshot.StatusKind switch
         {
-            RunnerStatusKind.Busy => "Busy",
-            RunnerStatusKind.Waiting => "Waiting",
-            RunnerStatusKind.Error => "Error",
+            RunnerStatusKind.Busy => T(LocalizationKeys.RunnerStatusBusy),
+            RunnerStatusKind.Waiting => T(LocalizationKeys.RunnerStatusWaiting),
+            RunnerStatusKind.Error => T(LocalizationKeys.RunnerStatusError),
             RunnerStatusKind.Running => T(LocalizationKeys.RunnerRunning),
             _ => T(LocalizationKeys.RunnerStopped)
         };
@@ -521,8 +489,7 @@ public sealed class TrayMenuWindow : Window
     {
         return mode switch
         {
-            RunnerControlMode.ForceRunning => T(LocalizationKeys.ControlModeForceRunning),
-            RunnerControlMode.ForceStopped => T(LocalizationKeys.ControlModeForceStopped),
+            RunnerControlMode.ForceRunning or RunnerControlMode.ForceStopped => T(LocalizationKeys.ControlModeManual),
             _ => T(LocalizationKeys.ControlModeAutomatic)
         };
     }

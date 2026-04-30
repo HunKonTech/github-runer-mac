@@ -30,8 +30,8 @@ public sealed class SettingsWindow : Window
     private readonly string[] _sections =
     [
         LocalizationKeys.SettingsGeneralTitle,
-        "Runners",
-        "GitHub Accounts",
+        LocalizationKeys.SettingsRunnersTitle,
+        LocalizationKeys.SettingsGitHubAccountsTitle,
         LocalizationKeys.SettingsUpdatesTitle,
         LocalizationKeys.SettingsNetworkTitle,
         LocalizationKeys.SettingsAdvancedTitle,
@@ -45,16 +45,26 @@ public sealed class SettingsWindow : Window
     private IPreferencesStore? _preferences;
     private IAppUpdateService? _updateService;
     private IRunnerUpdateService? _runnerUpdateService;
+    private IGitHubService? _gitHubService;
     private ILaunchAtLoginService? _launchAtLoginService;
     private ContentControl? _detail;
     private Border? _sidebar;
     private AppUpdateInfo? _availableUpdate;
     private string _updateStatus = "";
     private bool _isCheckingUpdates;
-    private bool _suppressStoreRefresh;
     private int _selectedSection;
     private string? _selectedRunnerId;
-    private string _runnerUpdateStatus = "Runner updates are idle.";
+    private string _runnerUpdateStatus = "";
+    private GitHubAccountSnapshot _gitHubAccount = new();
+    private string _gitHubStatus = "";
+    private string? _gitHubDeviceCode;
+    private string? _gitHubVerificationUri;
+    private GitHubRunnerScope _gitHubRunnerScope = GitHubRunnerScope.Repository;
+    private string _gitHubOwnerOrOrg = "";
+    private string _gitHubRepositoryName = "";
+    private string _gitHubRunnerName = Environment.MachineName;
+    private string _gitHubRunnerDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "actions-runner");
+    private string _gitHubLabels = "self-hosted";
 
     public SettingsWindow()
     {
@@ -71,6 +81,7 @@ public sealed class SettingsWindow : Window
         IPreferencesStore preferences,
         IAppUpdateService updateService,
         IRunnerUpdateService runnerUpdateService,
+        IGitHubService gitHubService,
         ILaunchAtLoginService launchAtLoginService)
     {
         _store = store;
@@ -78,8 +89,11 @@ public sealed class SettingsWindow : Window
         _preferences = preferences;
         _updateService = updateService;
         _runnerUpdateService = runnerUpdateService;
+        _gitHubService = gitHubService;
         _launchAtLoginService = launchAtLoginService;
         _updateStatus = T(LocalizationKeys.UpdateIdle);
+        _runnerUpdateStatus = T(LocalizationKeys.RunnerUpdateIdle);
+        _gitHubStatus = T(LocalizationKeys.GitHubStatusReady);
         Title = T(LocalizationKeys.SettingsWindowTitle);
 
         _localization.CurrentLanguage = _preferences.Language;
@@ -87,6 +101,7 @@ public sealed class SettingsWindow : Window
         _store.PropertyChanged += OnStorePropertyChanged;
 
         BuildShell();
+        _ = RefreshGitHubAccountAsync();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -288,11 +303,11 @@ public sealed class SettingsWindow : Window
 
     private Control BuildRunnersPage()
     {
-        var panel = Page("Runners");
+        var panel = Page(LocalizationKeys.SettingsRunnersTitle);
         var headerButtons = ButtonRow();
-        headerButtons.Children.Add(Button("Add runner", AddRunner));
-        headerButtons.Children.Add(Button("Import existing runner folder", async () => await ImportRunnerFolderAsync()));
-        headerButtons.Children.Add(Button("Update all runners", async () => await UpdateAllRunnersAsync()));
+        headerButtons.Children.Add(Button(LocalizationKeys.ButtonAddRunner, AddRunner));
+        headerButtons.Children.Add(Button(LocalizationKeys.ButtonImportRunnerFolder, async () => await ImportRunnerFolderAsync()));
+        headerButtons.Children.Add(Button(LocalizationKeys.ButtonUpdateAllRunners, async () => await UpdateAllRunnersAsync()));
         panel.Children.Add(headerButtons);
         panel.Children.Add(SecondaryText(_runnerUpdateStatus));
 
@@ -312,9 +327,9 @@ public sealed class SettingsWindow : Window
             list.Children.Add(RunnerListItem(runner));
         }
         if (runners.Count == 0)
-            list.Children.Add(SecondaryText("No runners configured yet."));
+            list.Children.Add(SecondaryText(T(LocalizationKeys.RunnerNoRunnersConfigured)));
 
-        var remove = Button("Remove runner", RemoveSelectedRunner, _selectedRunnerId != null);
+        var remove = Button(LocalizationKeys.ButtonRemoveRunner, RemoveSelectedRunner, _selectedRunnerId != null);
         list.Children.Add(remove);
         var listBorder = new Border
         {
@@ -355,7 +370,7 @@ public sealed class SettingsWindow : Window
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             AllowMultiple = false,
-            Title = "Import existing runner folder"
+            Title = T(LocalizationKeys.ButtonImportRunnerFolder)
         });
 
         var path = folders.FirstOrDefault()?.Path.LocalPath;
@@ -381,7 +396,7 @@ public sealed class SettingsWindow : Window
 
         var dialog = new Window
         {
-            Title = "Remove runner",
+            Title = T(LocalizationKeys.RunnerRemoveTitle),
             Width = 420,
             Height = 180,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -392,15 +407,15 @@ public sealed class SettingsWindow : Window
                 Spacing = 14,
                 Children =
                 {
-                    SecondaryText("Remove this runner profile from the app? The runner folder and GitHub configuration files will not be deleted."),
+                    SecondaryText(T(LocalizationKeys.RunnerRemoveConfirmation)),
                     ButtonRow()
                 }
             }
         };
 
         var buttons = (StackPanel)((StackPanel)dialog.Content!).Children[1];
-        buttons.Children.Add(Button("Cancel", () => dialog.Close(false)));
-        buttons.Children.Add(Button("Remove profile", () => dialog.Close(true)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonCancel, () => dialog.Close(false)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonRemoveProfile, () => dialog.Close(true)));
         var confirmed = await dialog.ShowDialog<bool>(this);
         if (!confirmed)
             return;
@@ -424,7 +439,11 @@ public sealed class SettingsWindow : Window
         var runner = _store.GetRunner(profile.Id);
         var wasRunning = runner?.RunnerSnapshot.IsRunning == true;
         var check = await _runnerUpdateService.CheckForUpdateAsync(profile);
-        _runnerUpdateStatus = $"{profile.DisplayName}: installed {check.InstalledVersion ?? "unknown"}, latest {check.LatestVersion ?? "unknown"}.";
+        _runnerUpdateStatus = T(
+            LocalizationKeys.RunnerUpdateVersionSummary,
+            profile.DisplayName,
+            check.InstalledVersion ?? T(LocalizationKeys.UpdateUnknownVersion),
+            check.LatestVersion ?? T(LocalizationKeys.UpdateUnknownVersion));
         BuildSelectedPage();
 
         if (!check.IsUpdateAvailable)
@@ -483,24 +502,24 @@ public sealed class SettingsWindow : Window
     private Control BuildRunnerDetail(RunnerInstanceStore? runner)
     {
         if (runner == null)
-            return SecondaryText("Add or import a runner to manage it here.");
+            return SecondaryText(T(LocalizationKeys.RunnerAddOrImportHint));
 
         var profile = runner.Profile.Clone();
         var detail = new StackPanel { Spacing = 11 };
-        detail.Children.Add(Row("Status", RunnerStatusText(runner)));
-        detail.Children.Add(Row("Activity", runner.RunnerSnapshot.Activity.Description));
-        detail.Children.Add(Row("Resources", $"{runner.ResourceUsage.CpuPercent:0.0}% CPU · {FormatMemory(runner.ResourceUsage.TotalMemoryBytes)}"));
+        detail.Children.Add(Row(LocalizationKeys.RunnerStatusTitle, RunnerStatusText(runner)));
+        detail.Children.Add(Row(LocalizationKeys.StatusActivityTitle, runner.RunnerSnapshot.Activity.Description));
+        detail.Children.Add(Row(LocalizationKeys.RunnerResourcesTitle, $"{runner.ResourceUsage.CpuPercent:0.0}% CPU · {FormatMemory(runner.ResourceUsage.TotalMemoryBytes)}"));
 
-        detail.Children.Add(TextField("Display name", profile.DisplayName, value => { profile.DisplayName = value; SaveProfile(profile); }));
-        detail.Children.Add(TextField("Runner directory", profile.RunnerDirectory, value => { profile.RunnerDirectory = value; SaveProfile(profile); }));
+        detail.Children.Add(TextField(LocalizationKeys.RunnerDisplayNameTitle, profile.DisplayName, value => { profile.DisplayName = value; SaveProfile(profile); }));
+        detail.Children.Add(TextField(LocalizationKeys.RunnerDirectoryTitle, profile.RunnerDirectory, value => { profile.RunnerDirectory = value; SaveProfile(profile); }));
 
         var pathButtons = ButtonRow();
-        pathButtons.Children.Add(Button("Choose folder", async () =>
+        pathButtons.Children.Add(Button(LocalizationKeys.ButtonChooseRunnerDirectory, async () =>
         {
             var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
                 AllowMultiple = false,
-                Title = "Runner directory"
+                Title = T(LocalizationKeys.RunnerDirectoryTitle)
             });
 
             var folder = folders.FirstOrDefault();
@@ -512,24 +531,24 @@ public sealed class SettingsWindow : Window
         }));
         detail.Children.Add(pathButtons);
 
-        detail.Children.Add(TextField("GitHub owner or org", profile.GitHubOwnerOrOrg, value => { profile.GitHubOwnerOrOrg = value; SaveProfile(profile); }));
-        detail.Children.Add(TextField("Repository name", profile.RepositoryName ?? "", value => { profile.RepositoryName = string.IsNullOrWhiteSpace(value) ? null : value; SaveProfile(profile); }));
-        detail.Children.Add(TextField("Labels", string.Join(", ", profile.Labels), value => { profile.Labels = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(); SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Organization runner", profile.IsOrganizationRunner, value => { profile.IsOrganizationRunner = value; SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Auto start", profile.AutoStartEnabled, value => { profile.AutoStartEnabled = value; SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Automatic mode", profile.AutomaticModeEnabled, value => { profile.AutomaticModeEnabled = value; SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Stop on battery", profile.StopOnBattery, value => { profile.StopOnBattery = value; SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Stop on metered network", profile.StopOnMeteredNetwork, value => { profile.StopOnMeteredNetwork = value; SaveProfile(profile); }));
-        detail.Children.Add(Toggle("Enabled", profile.IsEnabled, value => { profile.IsEnabled = value; SaveProfile(profile); }));
+        detail.Children.Add(TextField(LocalizationKeys.RunnerOwnerOrOrgTitle, profile.GitHubOwnerOrOrg, value => { profile.GitHubOwnerOrOrg = value; SaveProfile(profile); }));
+        detail.Children.Add(TextField(LocalizationKeys.RunnerRepositoryNameTitle, profile.RepositoryName ?? "", value => { profile.RepositoryName = string.IsNullOrWhiteSpace(value) ? null : value; SaveProfile(profile); }));
+        detail.Children.Add(TextField(LocalizationKeys.RunnerLabelsTitle, string.Join(", ", profile.Labels), value => { profile.Labels = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(); SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerOrganizationToggle, profile.IsOrganizationRunner, value => { profile.IsOrganizationRunner = value; SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerAutoStartToggle, profile.AutoStartEnabled, value => { profile.AutoStartEnabled = value; SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerAutomaticModeToggle, profile.AutomaticModeEnabled, value => { profile.AutomaticModeEnabled = value; SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerStopOnBatteryToggle, profile.StopOnBattery, value => { profile.StopOnBattery = value; SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerStopOnMeteredNetworkToggle, profile.StopOnMeteredNetwork, value => { profile.StopOnMeteredNetwork = value; SaveProfile(profile); }));
+        detail.Children.Add(Toggle(LocalizationKeys.RunnerEnabledToggle, profile.IsEnabled, value => { profile.IsEnabled = value; SaveProfile(profile); }));
 
         var buttons = ButtonRow();
-        buttons.Children.Add(Button("Start", async () => await (_store?.StartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
-        buttons.Children.Add(Button("Stop", async () => await (_store?.StopRunnerAsync(profile.Id) ?? Task.CompletedTask)));
-        buttons.Children.Add(Button("Restart", async () => await (_store?.RestartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
-        buttons.Children.Add(Button("Refresh status", async () => await (_store?.RefreshNowAsync() ?? Task.CompletedTask)));
-        buttons.Children.Add(Button("Open folder", () => _store?.OpenRunnerDirectory(profile.Id)));
-        buttons.Children.Add(Button("View logs", () => _store?.OpenRunnerLogs(profile.Id)));
-        buttons.Children.Add(Button("Update runner", async () => await UpdateRunnerAsync(profile), true));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonStart, async () => await (_store?.StartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonStop, async () => await (_store?.StopRunnerAsync(profile.Id) ?? Task.CompletedTask)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonRestart, async () => await (_store?.RestartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonRefreshStatus, async () => await (_store?.RefreshNowAsync() ?? Task.CompletedTask)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonOpenFolder, () => _store?.OpenRunnerDirectory(profile.Id)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonViewLogs, () => _store?.OpenRunnerLogs(profile.Id)));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonUpdateRunner, async () => await UpdateRunnerAsync(profile), true));
         detail.Children.Add(buttons);
 
         return detail;
@@ -537,9 +556,166 @@ public sealed class SettingsWindow : Window
 
     private Control BuildGitHubAccountsPage()
     {
-        var panel = Page("GitHub Accounts");
-        panel.Children.Add(SecondaryText("GitHub account setup will live here. Runner profiles already capture the owner, organization, and repository fields needed for runner management."));
+        var panel = Page(LocalizationKeys.SettingsGitHubAccountsTitle);
+        panel.Children.Add(Label(LocalizationKeys.GitHubSetupInstructionsTitle));
+        panel.Children.Add(SecondaryText(T(LocalizationKeys.GitHubSetupInstructionsBody)));
+        var setupButtons = ButtonRow();
+        setupButtons.Children.Add(LinkButton("GitHub Developer Settings", "https://github.com/settings/developers"));
+        setupButtons.Children.Add(LinkButton(LocalizationKeys.ButtonOpenReleasePage, "https://docs.github.com/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"));
+        panel.Children.Add(setupButtons);
+
+        panel.Children.Add(TextField(LocalizationKeys.GitHubOAuthClientIdTitle, _preferences?.GitHubOAuthClientId ?? "", value =>
+        {
+            if (_preferences != null)
+                _preferences.GitHubOAuthClientId = value.Trim();
+        }));
+
+        panel.Children.Add(Row(LocalizationKeys.UpdateStatusTitle, GitHubAccountText()));
+        if (!string.IsNullOrWhiteSpace(_gitHubDeviceCode))
+            panel.Children.Add(Row(LocalizationKeys.GitHubDeviceCode, _gitHubDeviceCode));
+        panel.Children.Add(SecondaryText(_gitHubStatus));
+
+        var accountButtons = ButtonRow();
+        accountButtons.Children.Add(Button(LocalizationKeys.GitHubSignInButton, async () => await SignInGitHubAsync()));
+        accountButtons.Children.Add(Button(LocalizationKeys.GitHubSignOutButton, async () => await SignOutGitHubAsync(), _gitHubAccount.IsSignedIn));
+        if (!string.IsNullOrWhiteSpace(_gitHubVerificationUri))
+            accountButtons.Children.Add(LinkButton(LocalizationKeys.GitHubOpenDevicePageButton, _gitHubVerificationUri));
+        panel.Children.Add(accountButtons);
+
+        panel.Children.Add(Label(LocalizationKeys.GitHubRunnerSetupTitle));
+        panel.Children.Add(Label(LocalizationKeys.GitHubRunnerScopeTitle));
+        var scope = new ComboBox
+        {
+            Width = 320,
+            Height = 38,
+            FontSize = 16,
+            Background = FieldBrush,
+            Foreground = PrimaryTextBrush,
+            BorderBrush = SidebarBorderBrush,
+            ItemsSource = new[] { T(LocalizationKeys.GitHubRunnerScopeRepository), T(LocalizationKeys.GitHubRunnerScopeOrganization) },
+            SelectedIndex = _gitHubRunnerScope == GitHubRunnerScope.Organization ? 1 : 0
+        };
+        scope.SelectionChanged += (_, _) =>
+        {
+            _gitHubRunnerScope = scope.SelectedIndex == 1 ? GitHubRunnerScope.Organization : GitHubRunnerScope.Repository;
+            BuildSelectedPage();
+        };
+        panel.Children.Add(scope);
+
+        panel.Children.Add(TextField(LocalizationKeys.GitHubOwnerOrgField, _gitHubOwnerOrOrg, value => _gitHubOwnerOrOrg = value.Trim()));
+        if (_gitHubRunnerScope == GitHubRunnerScope.Repository)
+            panel.Children.Add(TextField(LocalizationKeys.GitHubRepositoryField, _gitHubRepositoryName, value => _gitHubRepositoryName = value.Trim()));
+        panel.Children.Add(TextField(LocalizationKeys.GitHubRunnerNameField, _gitHubRunnerName, value => _gitHubRunnerName = value.Trim()));
+        panel.Children.Add(TextField(LocalizationKeys.GitHubRunnerDirectoryField, _gitHubRunnerDirectory, value => _gitHubRunnerDirectory = value.Trim()));
+        panel.Children.Add(TextField(LocalizationKeys.RunnerLabelsTitle, _gitHubLabels, value => _gitHubLabels = value));
+
+        var runnerButtons = ButtonRow();
+        runnerButtons.Children.Add(Button(LocalizationKeys.ButtonChooseRunnerDirectory, async () =>
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                AllowMultiple = false,
+                Title = T(LocalizationKeys.GitHubRunnerDirectoryField)
+            });
+            var path = folders.FirstOrDefault()?.Path.LocalPath;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                _gitHubRunnerDirectory = path;
+                BuildSelectedPage();
+            }
+        }));
+        runnerButtons.Children.Add(Button(LocalizationKeys.GitHubCreateConfigureRunnerButton, async () => await CreateAndConfigureGitHubRunnerAsync(), _gitHubAccount.IsSignedIn));
+        panel.Children.Add(runnerButtons);
         return Scroll(panel);
+    }
+
+    private string GitHubAccountText()
+    {
+        return _gitHubAccount.IsSignedIn
+            ? T(LocalizationKeys.GitHubSignedInAs, _gitHubAccount.Login ?? "")
+            : T(LocalizationKeys.GitHubNotSignedIn);
+    }
+
+    private async Task RefreshGitHubAccountAsync()
+    {
+        if (_gitHubService == null)
+            return;
+
+        _gitHubAccount = await _gitHubService.GetAccountAsync();
+        Dispatcher.UIThread.Post(BuildSelectedPage);
+    }
+
+    private async Task SignInGitHubAsync()
+    {
+        if (_gitHubService == null || _preferences == null)
+            return;
+
+        var clientId = _preferences.GitHubOAuthClientId.Trim();
+        if (string.IsNullOrWhiteSpace(clientId))
+            return;
+
+        try
+        {
+            _gitHubStatus = T(LocalizationKeys.GitHubStatusSigningIn);
+            var flow = await _gitHubService.StartDeviceFlowAsync(clientId);
+            _gitHubDeviceCode = flow.UserCode;
+            _gitHubVerificationUri = string.IsNullOrWhiteSpace(flow.VerificationUriComplete) ? flow.VerificationUri : flow.VerificationUriComplete;
+            OpenUrl(_gitHubVerificationUri);
+            BuildSelectedPage();
+            await _gitHubService.CompleteDeviceFlowAsync(clientId, flow.DeviceCode, flow.Interval);
+            _gitHubDeviceCode = null;
+            _gitHubVerificationUri = null;
+            await RefreshGitHubAccountAsync();
+            _gitHubStatus = T(LocalizationKeys.GitHubStatusReady);
+        }
+        catch (Exception ex)
+        {
+            _gitHubStatus = T(LocalizationKeys.GitHubStatusError, ex.Message);
+        }
+
+        BuildSelectedPage();
+    }
+
+    private async Task SignOutGitHubAsync()
+    {
+        if (_gitHubService == null)
+            return;
+
+        await _gitHubService.SignOutAsync();
+        _gitHubAccount = new GitHubAccountSnapshot();
+        BuildSelectedPage();
+    }
+
+    private async Task CreateAndConfigureGitHubRunnerAsync()
+    {
+        if (_gitHubService == null || _store == null)
+            return;
+
+        try
+        {
+            var request = new GitHubRunnerSetupRequest
+            {
+                Scope = _gitHubRunnerScope,
+                OwnerOrOrg = _gitHubOwnerOrOrg.Trim(),
+                RepositoryName = _gitHubRepositoryName.Trim(),
+                RunnerDirectory = _gitHubRunnerDirectory.Trim(),
+                RunnerName = _gitHubRunnerName.Trim(),
+                Labels = _gitHubLabels.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+            };
+            var token = await _gitHubService.CreateRegistrationTokenAsync(request);
+            var result = await _gitHubService.ConfigureRunnerAsync(request, token);
+            _gitHubStatus = result.Succeeded
+                ? T(LocalizationKeys.GitHubStatusConfigured)
+                : T(LocalizationKeys.GitHubStatusError, result.Message);
+            if (result.RunnerProfile != null)
+                _store.AddRunnerProfile(result.RunnerProfile);
+        }
+        catch (Exception ex)
+        {
+            _gitHubStatus = T(LocalizationKeys.GitHubStatusError, ex.Message);
+        }
+
+        BuildSelectedPage();
     }
 
     private Control BuildUpdatesPage()
@@ -773,7 +949,7 @@ public sealed class SettingsWindow : Window
         var panel = new StackPanel { Spacing = 5 };
         panel.Children.Add(new TextBlock
         {
-            Text = label,
+            Text = T(label),
             FontSize = 14,
             FontWeight = FontWeight.Bold,
             Foreground = PrimaryTextBrush
@@ -802,7 +978,7 @@ public sealed class SettingsWindow : Window
     {
         var toggle = new CheckBox
         {
-            Content = text,
+            Content = T(text),
             IsChecked = value,
             FontSize = 15,
             FontWeight = FontWeight.SemiBold,
@@ -884,13 +1060,15 @@ public sealed class SettingsWindow : Window
 
     private Button LinkButton(string key, string url)
     {
-        return Button(key, () =>
+        return Button(key, () => OpenUrl(url));
+    }
+
+    private static void OpenUrl(string url)
+    {
+        Process.Start(new ProcessStartInfo
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
+            FileName = url,
+            UseShellExecute = true
         });
     }
 
@@ -898,6 +1076,11 @@ public sealed class SettingsWindow : Window
     {
         var value = _localization?.Get(key) ?? key;
         return value == key && char.IsUpper(key.FirstOrDefault()) ? key : value;
+    }
+
+    private string T(string key, params object[] args)
+    {
+        return _localization?.Get(key, args) ?? key;
     }
 
     private string RunnerStatusText()
@@ -911,9 +1094,9 @@ public sealed class SettingsWindow : Window
     {
         return runner.Snapshot.StatusKind switch
         {
-            RunnerStatusKind.Busy => "Busy",
-            RunnerStatusKind.Waiting => "Waiting",
-            RunnerStatusKind.Error => "Error",
+            RunnerStatusKind.Busy => T(LocalizationKeys.RunnerStatusBusy),
+            RunnerStatusKind.Waiting => T(LocalizationKeys.RunnerStatusWaiting),
+            RunnerStatusKind.Error => T(LocalizationKeys.RunnerStatusError),
             RunnerStatusKind.Running => T(LocalizationKeys.RunnerRunning),
             _ => T(LocalizationKeys.RunnerStopped)
         };
@@ -959,9 +1142,6 @@ public sealed class SettingsWindow : Window
 
     private void OnStorePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_suppressStoreRefresh)
-            return;
-
         Dispatcher.UIThread.Post(BuildSelectedPage);
     }
 }

@@ -40,4 +40,9 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
   </ItemGroup>
 
+  <Target Name="BuildMacNetworkPathHelper" AfterTargets="Build;Publish" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <MakeDir Directories="$(OutDir)NativeHelpers" />
+    <Exec Command="swiftc &quot;$(MSBuildProjectDirectory)/../GitRunnerManager.Platform/Native/macOS/NetworkPathHelper.swift&quot; -o &quot;$(OutDir)NativeHelpers/MacNetworkPathHelper&quot;" />
+  </Target>
+
 </Project>

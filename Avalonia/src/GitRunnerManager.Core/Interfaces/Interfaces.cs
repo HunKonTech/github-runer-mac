@@ -53,6 +53,7 @@ public interface IBatteryMonitorFactory
 public interface IPreferencesStore
 {
     AppLanguage Language { get; set; }
+    string GitHubOAuthClientId { get; set; }
     string RunnerDirectory { get; set; }
     List<RunnerConfig> RunnerProfiles { get; set; }
     RunnerControlMode ControlMode { get; set; }
@@ -71,6 +72,23 @@ public interface IAppUpdateService
 {
     Task<AppUpdateInfo?> CheckForUpdatesAsync();
     Task DownloadAndOpenUpdateAsync(AppUpdateInfo update);
+}
+
+public interface ICredentialStore
+{
+    Task<string?> GetGitHubTokenAsync();
+    Task SaveGitHubTokenAsync(string token);
+    Task DeleteGitHubTokenAsync();
+}
+
+public interface IGitHubService
+{
+    Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
+    Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
+    Task<GitHubAccountSnapshot> GetAccountAsync(CancellationToken cancellationToken = default);
+    Task SignOutAsync();
+    Task<GitHubRegistrationToken> CreateRegistrationTokenAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default);
+    Task<GitHubRunnerSetupResult> ConfigureRunnerAsync(GitHubRunnerSetupRequest request, GitHubRegistrationToken token, CancellationToken cancellationToken = default);
 }
 
 public interface IRunnerManager : IDisposable

@@ -50,6 +50,11 @@ if [ -d "$PUBLISH_DIR/Assets" ]; then
     cp -r "$PUBLISH_DIR/Assets" "$APP_CONTENTS/"
 fi
 
+if [ -d "$PUBLISH_DIR/NativeHelpers" ]; then
+    cp -r "$PUBLISH_DIR/NativeHelpers" "$APP_CONTENTS/MacOS/"
+    chmod +x "$APP_CONTENTS/MacOS/NativeHelpers/"*
+fi
+
 if [ -d "$AVALONIA_DIR/src/GitRunnerManager.App/Assets" ]; then
     cp -r "$AVALONIA_DIR/src/GitRunnerManager.App/Assets" "$APP_CONTENTS/MacOS/"
 fi

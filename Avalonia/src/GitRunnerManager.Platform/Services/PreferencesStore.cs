@@ -64,6 +64,16 @@ public class PreferencesStore : IPreferencesStore
         }
     }
 
+    public string GitHubOAuthClientId
+    {
+        get => GetString("", "GitHubOAuthClientId");
+        set
+        {
+            _settings["GitHubOAuthClientId"] = value;
+            Save();
+        }
+    }
+
     public string RunnerDirectory
     {
         get => RunnerProfiles.FirstOrDefault()?.RunnerDirectory ?? GetString(DefaultRunnerDirectory(), "RunnerDirectory");

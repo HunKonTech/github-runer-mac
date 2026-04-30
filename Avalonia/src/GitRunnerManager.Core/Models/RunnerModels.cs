@@ -44,6 +44,56 @@ public class RunnerConfig
     }
 }
 
+public enum GitHubRunnerScope
+{
+    Repository,
+    Organization
+}
+
+public class GitHubAccountSnapshot
+{
+    public bool IsSignedIn { get; init; }
+    public string? Login { get; init; }
+    public string? Error { get; init; }
+}
+
+public class GitHubDeviceFlowStart
+{
+    public required string DeviceCode { get; init; }
+    public required string UserCode { get; init; }
+    public required string VerificationUri { get; init; }
+    public required string VerificationUriComplete { get; init; }
+    public int ExpiresIn { get; init; }
+    public int Interval { get; init; }
+}
+
+public class GitHubRegistrationToken
+{
+    public required string Token { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+}
+
+public class GitHubRunnerSetupRequest
+{
+    public GitHubRunnerScope Scope { get; init; }
+    public string OwnerOrOrg { get; init; } = string.Empty;
+    public string RepositoryName { get; init; } = string.Empty;
+    public string RunnerDirectory { get; init; } = string.Empty;
+    public string RunnerName { get; init; } = string.Empty;
+    public List<string> Labels { get; init; } = [];
+
+    public string GitHubUrl => Scope == GitHubRunnerScope.Organization
+        ? $"https://github.com/{OwnerOrOrg}"
+        : $"https://github.com/{OwnerOrOrg}/{RepositoryName}";
+}
+
+public class GitHubRunnerSetupResult
+{
+    public bool Succeeded { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public RunnerConfig? RunnerProfile { get; init; }
+}
+
 public enum RunnerStatusKind
 {
     Running,

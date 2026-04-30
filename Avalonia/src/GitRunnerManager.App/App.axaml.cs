@@ -27,14 +27,17 @@ public partial class App : Application
     private IPreferencesStore? _preferences;
     private IAppUpdateService? _updateService;
     private IRunnerUpdateService? _runnerUpdateService;
+    private IGitHubService? _gitHubService;
     private ILaunchAtLoginService? _launchAtLoginService;
     private TrayIcon? _trayIcon;
     private TrayMenuWindow? _trayMenuWindow;
+    private InitializingTrayWindow? _initializingTrayWindow;
     private SettingsWindow? _settingsWindow;
     private AboutWindow? _aboutWindow;
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private TrayIconState? _currentTrayIconState;
     private DateTimeOffset _lastTrayToggleAt;
+    private bool _openTrayWhenStoreReady;
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -57,20 +60,44 @@ public partial class App : Application
             _localization.CurrentLanguage = _preferences.Language;
             _updateService = new AppUpdateService(_prefsFactory);
             _runnerUpdateService = new RunnerUpdateService();
+            _gitHubService = new GitHubService(new CredentialStore());
             _launchAtLoginService = new LaunchAtLoginServiceFactory().Create();
 
-            _store = new RunnerTrayStore(
-                new RunnerControllerFactory(new RunnerLogParser(_localization)),
-                new ResourceMonitorFactory(),
-                _prefsFactory,
-                _localization,
-                new NetworkConditionMonitor(_localization),
-                new BatteryMonitorFactory()
-            );
-
             CreateTrayIcon();
-            _store.PropertyChanged += OnStorePropertyChanged;
+            _ = InitializeRunnerStoreAsync();
         }
+    }
+
+    private async Task InitializeRunnerStoreAsync()
+    {
+        if (_prefsFactory == null || _localization == null)
+            return;
+
+        var prefsFactory = _prefsFactory;
+        var localization = _localization;
+
+        var store = await Task.Run(() => new RunnerTrayStore(
+            new RunnerControllerFactory(new RunnerLogParser(localization)),
+            new ResourceMonitorFactory(),
+            prefsFactory,
+            localization,
+            new NetworkConditionMonitor(localization),
+            new BatteryMonitorFactory()
+        ));
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            _store = store;
+            _store.PropertyChanged += OnStorePropertyChanged;
+            UpdateTrayIcon();
+            if (_openTrayWhenStoreReady)
+            {
+                _openTrayWhenStoreReady = false;
+                _initializingTrayWindow?.Close();
+                _initializingTrayWindow = null;
+                ShowTrayMenuWindow();
+            }
+        });
     }
 
     private void CreateTrayIcon()
@@ -128,17 +155,39 @@ public partial class App : Application
             return;
         }
 
+        if (_initializingTrayWindow?.IsVisible == true)
+        {
+            _initializingTrayWindow.Hide();
+            return;
+        }
+
         ShowTrayMenuWindow();
     }
 
     private void ShowTrayMenuWindow()
     {
+        if (_localization == null)
+            return;
+
+        if (_store == null || _launchAtLoginService == null)
+        {
+            _openTrayWhenStoreReady = true;
+            if (_initializingTrayWindow == null)
+            {
+                _initializingTrayWindow = new InitializingTrayWindow(_localization);
+                _initializingTrayWindow.Closed += (_, _) => _initializingTrayWindow = null;
+            }
+
+            _initializingTrayWindow.ShowAsPopover();
+            return;
+        }
+
         if (_trayMenuWindow == null)
         {
             _trayMenuWindow = new TrayMenuWindow(
-                _store!,
-                _localization!,
-                _launchAtLoginService!,
+                _store,
+                _localization,
+                _launchAtLoginService,
                 () => RunRunnerActionAsync(() => _store?.ForceStartAsync() ?? Task.CompletedTask),
                 () => RunRunnerActionAsync(() => _store?.ForceStopAsync() ?? Task.CompletedTask),
                 () => RunRunnerActionAsync(() => _store?.SetAutomaticModeAsync() ?? Task.CompletedTask),
@@ -170,7 +219,7 @@ public partial class App : Application
         if (_settingsWindow == null)
         {
             _settingsWindow = new SettingsWindow();
-            _settingsWindow.Initialize(_store!, _localization!, _preferences!, _updateService!, _runnerUpdateService!, _launchAtLoginService!);
+            _settingsWindow.Initialize(_store!, _localization!, _preferences!, _updateService!, _runnerUpdateService!, _gitHubService!, _launchAtLoginService!);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         _settingsWindow.Show();
@@ -194,10 +243,10 @@ public partial class App : Application
 
     private void UpdateTrayIcon()
     {
-        if (_trayIcon == null || _store == null)
+        if (_trayIcon == null)
             return;
 
-        var nextState = GetTrayIconState(_store);
+        var nextState = _store == null ? TrayIconState.Paused : GetTrayIconState(_store);
         if (_currentTrayIconState == nextState)
             return;
 

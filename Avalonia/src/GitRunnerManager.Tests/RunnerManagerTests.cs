@@ -56,6 +56,7 @@ internal sealed class FakePreferencesStoreFactory(InMemoryPreferencesStore store
 internal sealed class InMemoryPreferencesStore : IPreferencesStore
 {
     public AppLanguage Language { get; set; } = AppLanguage.System;
+    public string GitHubOAuthClientId { get; set; } = "";
     public string RunnerDirectory { get; set; } = "/tmp/runner";
     public List<RunnerConfig> RunnerProfiles { get; set; } = [];
     public RunnerControlMode ControlMode { get; set; } = RunnerControlMode.Automatic;
