@@ -14,8 +14,10 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     private readonly IGitHubActionsService _actionsService;
     private readonly ILocalizationService _localization;
     private CancellationTokenSource? _pollingCts;
+    private DateTimeOffset _lastApiRefresh = DateTimeOffset.MinValue;
 
     [ObservableProperty] private GitHubAccountInfo account = new();
+    [ObservableProperty] private IReadOnlyList<GitHubAccountConnection> accounts = [];
     [ObservableProperty] private IReadOnlyList<GitHubRunnerInfo> runners = [];
     [ObservableProperty] private IReadOnlyList<GitHubWorkflowRunInfo> workflowRuns = [];
     [ObservableProperty] private IReadOnlyList<GitHubWorkflowJobInfo> selectedJobs = [];
@@ -23,10 +25,12 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     [ObservableProperty] private GitHubApiPermissionStatus permissionStatus = new();
     [ObservableProperty] private DateTimeOffset? lastRefreshTime;
     [ObservableProperty] private bool isLoading;
+    [ObservableProperty] private bool isRealtimeRefreshActive;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string deviceCode = "";
     [ObservableProperty] private string verificationUri = "";
     [ObservableProperty] private string oauthClientId = "";
+    [ObservableProperty] private string organizationLogin = "";
 
     public ActionsDashboardViewModel(
         RunnerTrayStore store,
@@ -57,6 +61,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     {
         _pollingCts?.Cancel();
         _pollingCts = new CancellationTokenSource();
+        IsRealtimeRefreshActive = true;
         _ = PollAsync(_pollingCts.Token);
     }
 
@@ -64,6 +69,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     {
         _pollingCts?.Cancel();
         _pollingCts = null;
+        IsRealtimeRefreshActive = false;
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -75,7 +81,8 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         try
         {
             Account = await _authService.GetAccountAsync(cancellationToken);
-            if (!Account.IsSignedIn)
+            Accounts = await _authService.GetAccountsAsync(cancellationToken);
+            if (!Account.IsSignedIn || Accounts.Count == 0)
             {
                 WorkflowRuns = [];
                 Runners = [];
@@ -87,7 +94,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
             var snapshot = await _actionsService.GetDashboardAsync(_store.Runners.Select(runner => runner.Profile).ToList(), cancellationToken);
             Account = snapshot.Account;
-            Runners = snapshot.Runners;
+            Runners = MergeLocalRunnerState(snapshot.Runners);
             WorkflowRuns = snapshot.WorkflowRuns;
             PermissionStatus = snapshot.PermissionStatus;
             LastRefreshTime = snapshot.RefreshedAt;
@@ -108,7 +115,22 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         }
     }
 
-    public async Task SignInAsync(Action<string> openUrl, CancellationToken cancellationToken = default)
+    public Task RefreshRealtimeAsync(CancellationToken cancellationToken = default)
+    {
+        return RefreshLocalAndRemoteAsync(true, cancellationToken);
+    }
+
+    public Task SignInAsync(Action<string> openUrl, CancellationToken cancellationToken = default)
+    {
+        return SignInAsync(GitHubAccountConnectionKind.Personal, "", openUrl, cancellationToken);
+    }
+
+    public Task SignInOrganizationAsync(Action<string> openUrl, CancellationToken cancellationToken = default)
+    {
+        return SignInAsync(GitHubAccountConnectionKind.Organization, OrganizationLogin, openUrl, cancellationToken);
+    }
+
+    private async Task SignInAsync(GitHubAccountConnectionKind kind, string organization, Action<string> openUrl, CancellationToken cancellationToken)
     {
         var clientId = OauthClientId.Trim();
         if (string.IsNullOrWhiteSpace(clientId))
@@ -124,7 +146,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
             DeviceCode = flow.UserCode;
             VerificationUri = string.IsNullOrWhiteSpace(flow.VerificationUriComplete) ? flow.VerificationUri : flow.VerificationUriComplete;
             openUrl(VerificationUri);
-            await _authService.CompleteDeviceFlowAsync(clientId, flow.DeviceCode, flow.Interval, cancellationToken);
+            await _authService.CompleteDeviceFlowAsync(clientId, flow.DeviceCode, flow.Interval, kind, organization, cancellationToken);
             DeviceCode = "";
             VerificationUri = "";
             StatusMessage = T(LocalizationKeys.ActionsSignedIn);
@@ -140,9 +162,20 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     {
         await _authService.SignOutAsync();
         Account = new GitHubAccountInfo();
+        Accounts = [];
         WorkflowRuns = [];
         Runners = [];
         SelectedJobs = [];
+        StatusMessage = T(LocalizationKeys.ActionsSignedOut);
+    }
+
+    public async Task SignOutAsync(string accountId)
+    {
+        await _authService.SignOutAsync(accountId);
+        Accounts = await _authService.GetAccountsAsync();
+        if (Accounts.Count == 0)
+            Account = new GitHubAccountInfo();
+        await RefreshAsync();
         StatusMessage = T(LocalizationKeys.ActionsSignedOut);
     }
 
@@ -172,13 +205,68 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     private async Task PollAsync(CancellationToken cancellationToken)
     {
-        await RefreshAsync(cancellationToken);
+        await RefreshLocalAndRemoteAsync(true, cancellationToken);
         while (!cancellationToken.IsCancellationRequested)
         {
-            var interval = WorkflowRuns.Any(run => run.IsActive) ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(45);
+            var interval = IsAnyLocalRunnerBusy || WorkflowRuns.Any(run => run.IsActive)
+                ? TimeSpan.FromSeconds(5)
+                : TimeSpan.FromSeconds(15);
             await Task.Delay(interval, cancellationToken);
+            await RefreshLocalAndRemoteAsync(false, cancellationToken);
+        }
+    }
+
+    private bool IsAnyLocalRunnerBusy => _store.Runners.Any(runner =>
+        runner.Snapshot.StatusKind == RunnerStatusKind.Busy ||
+        runner.ResourceUsage.IsJobActive ||
+        runner.RunnerSnapshot.Activity.Kind == RunnerActivityKind.Busy);
+
+    private async Task RefreshLocalAndRemoteAsync(bool forceRemote, CancellationToken cancellationToken)
+    {
+        await _store.RefreshNowAsync();
+        Runners = MergeLocalRunnerState(Runners);
+
+        var now = DateTimeOffset.Now;
+        var remoteInterval = IsAnyLocalRunnerBusy || WorkflowRuns.Any(run => run.IsActive)
+            ? TimeSpan.FromSeconds(10)
+            : TimeSpan.FromSeconds(45);
+        if (forceRemote || now - _lastApiRefresh >= remoteInterval)
+        {
+            _lastApiRefresh = now;
             await RefreshAsync(cancellationToken);
         }
+    }
+
+    private IReadOnlyList<GitHubRunnerInfo> MergeLocalRunnerState(IReadOnlyList<GitHubRunnerInfo> githubRunners)
+    {
+        return githubRunners.Select(githubRunner =>
+        {
+            var localRunner = _store.Runners.FirstOrDefault(runner =>
+                GitHubJobMatcher.Matches(githubRunner.Name, runner.Profile) ||
+                string.Equals(runner.Profile.DisplayName, githubRunner.Name, StringComparison.OrdinalIgnoreCase));
+            if (localRunner == null)
+                return githubRunner;
+
+            var activity = localRunner.RunnerSnapshot.Activity;
+            var isBusy = localRunner.Snapshot.StatusKind == RunnerStatusKind.Busy ||
+                localRunner.ResourceUsage.IsJobActive ||
+                activity.Kind == RunnerActivityKind.Busy;
+
+            return new GitHubRunnerInfo
+            {
+                Id = githubRunner.Id,
+                Name = githubRunner.Name,
+                Status = githubRunner.Status,
+                Busy = githubRunner.Busy,
+                IsLocalRunnerBusy = isBusy,
+                LocalActivityDescription = activity.Description,
+                Labels = githubRunner.Labels,
+                Owner = githubRunner.Owner,
+                Repository = githubRunner.Repository,
+                Group = githubRunner.Group,
+                PermissionMessage = githubRunner.PermissionMessage
+            };
+        }).ToList();
     }
 
     public void Dispose()

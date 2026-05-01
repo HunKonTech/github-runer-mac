@@ -86,13 +86,19 @@ public interface IGitHubTokenStore
     Task<string?> GetTokenAsync();
     Task SaveTokenAsync(string token);
     Task DeleteTokenAsync();
+    Task<IReadOnlyList<GitHubStoredAccount>> GetAccountsAsync();
+    Task SaveAccountAsync(GitHubStoredAccount account);
+    Task DeleteAccountAsync(string accountId);
 }
 
 public interface IGitHubAuthService
 {
     Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
     Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
+    Task<GitHubAccountConnection> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default);
     Task<GitHubAccountInfo> GetAccountAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitHubAccountConnection>> GetAccountsAsync(CancellationToken cancellationToken = default);
+    Task SignOutAsync(string accountId);
     Task SignOutAsync();
 }
 

@@ -47,6 +47,13 @@ public class GitHubService : IGitHubService, IGitHubAuthService
 
     public async Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default)
     {
+        var account = await CompleteDeviceFlowAsync(clientId, deviceCode, intervalSeconds, GitHubAccountConnectionKind.Personal, "", cancellationToken);
+        var stored = (await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync()).FirstOrDefault(item => item.Id == account.Id);
+        return stored?.Token ?? "";
+    }
+
+    public async Task<GitHubAccountConnection> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default)
+    {
         while (!cancellationToken.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, intervalSeconds)), cancellationToken);
@@ -66,7 +73,17 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             if (!string.IsNullOrWhiteSpace(result?.AccessToken))
             {
                 await _credentialStore.SaveGitHubTokenAsync(result.AccessToken);
-                return result.AccessToken;
+                var account = await GetAccountInfoAsync(result.AccessToken, cancellationToken);
+                var connection = new GitHubStoredAccount
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Login = account.Login ?? "GitHub",
+                    Token = result.AccessToken,
+                    Kind = kind,
+                    Organization = organization.Trim()
+                };
+                await ((IGitHubTokenStore)_credentialStore).SaveAccountAsync(connection);
+                return connection;
             }
 
             if (result?.Error is "authorization_pending" or "slow_down")
@@ -96,8 +113,18 @@ public class GitHubService : IGitHubService, IGitHubAuthService
     {
         var token = await _credentialStore.GetGitHubTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
+        {
+            var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
+            token = accounts.FirstOrDefault()?.Token;
+        }
+        if (string.IsNullOrWhiteSpace(token))
             return new GitHubAccountInfo { IsSignedIn = false };
 
+        return await GetAccountInfoAsync(token, cancellationToken);
+    }
+
+    private async Task<GitHubAccountInfo> GetAccountInfoAsync(string token, CancellationToken cancellationToken = default)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
@@ -120,6 +147,23 @@ public class GitHubService : IGitHubService, IGitHubAuthService
     public Task SignOutAsync()
     {
         return _credentialStore.DeleteGitHubTokenAsync();
+    }
+
+    public async Task<IReadOnlyList<GitHubAccountConnection>> GetAccountsAsync(CancellationToken cancellationToken = default)
+    {
+        var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
+        return accounts.Select(account => new GitHubAccountConnection
+        {
+            Id = account.Id,
+            Login = account.Login,
+            Kind = account.Kind,
+            Organization = account.Organization
+        }).ToList();
+    }
+
+    public Task SignOutAsync(string accountId)
+    {
+        return ((IGitHubTokenStore)_credentialStore).DeleteAccountAsync(accountId);
     }
 
     public async Task<GitHubRegistrationToken> CreateRegistrationTokenAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default)

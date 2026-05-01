@@ -26,19 +26,20 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
     public async Task<GitHubDashboardSnapshot> GetDashboardAsync(IReadOnlyList<RunnerConfig> runners, CancellationToken cancellationToken = default)
     {
         var account = await _authService.GetAccountAsync(cancellationToken);
-        if (!account.IsSignedIn)
+        var accounts = await _tokenStore.GetAccountsAsync();
+        if (!account.IsSignedIn || accounts.Count == 0)
             return new GitHubDashboardSnapshot { Account = account };
 
         var permission = new GitHubApiPermissionStatus();
         var runnerInfos = new List<GitHubRunnerInfo>();
         foreach (var runner in runners)
-            runnerInfos.Add(await GetRunnerInfoAsync(runner, cancellationToken));
+            runnerInfos.Add(await GetRunnerInfoAsync(runner, accounts, cancellationToken));
 
-        var repositories = await GetRepositoriesAsync(runners, cancellationToken);
+        var repositories = await GetRepositoriesAsync(runners, accounts, cancellationToken);
         var runs = new List<GitHubWorkflowRunInfo>();
         foreach (var repository in repositories.Take(12))
         {
-            var repositoryRuns = await GetWorkflowRunsAsync(repository, runners, cancellationToken);
+            var repositoryRuns = await GetWorkflowRunsAsync(repository, runners, accounts, cancellationToken);
             runs.AddRange(repositoryRuns);
         }
 
@@ -61,7 +62,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         if (string.IsNullOrWhiteSpace(run.JobsUrl))
             return [];
 
-        var response = await SendAsync(HttpMethod.Get, run.JobsUrl, cancellationToken);
+        var response = await SendAnyAccountAsync(HttpMethod.Get, run.JobsUrl, cancellationToken);
         if (!response.IsSuccessStatusCode)
             return [];
 
@@ -70,7 +71,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         return parsed?.Jobs.Select(MapJob).ToList() ?? [];
     }
 
-    private async Task<GitHubRunnerInfo> GetRunnerInfoAsync(RunnerConfig runner, CancellationToken cancellationToken)
+    private async Task<GitHubRunnerInfo> GetRunnerInfoAsync(RunnerConfig runner, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
         var owner = new GitHubOwnerInfo
         {
@@ -98,7 +99,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         var path = runner.IsOrganizationRunner
             ? $"https://api.github.com/orgs/{runner.GitHubOwnerOrOrg}/actions/runners?per_page=100"
             : $"https://api.github.com/repos/{runner.GitHubOwnerOrOrg}/{runner.RepositoryName}/actions/runners?per_page=100";
-        var response = await SendAsync(HttpMethod.Get, path, cancellationToken);
+        var response = await SendBestAccountAsync(HttpMethod.Get, path, runner.GitHubOwnerOrOrg, accounts, cancellationToken);
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
             return fallback.withPermission("Organization runner details require admin permission.");
         if (!response.IsSuccessStatusCode)
@@ -111,7 +112,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             return fallback;
 
         var group = runner.IsOrganizationRunner && match.RunnerGroupId.HasValue
-            ? await GetRunnerGroupAsync(runner.GitHubOwnerOrOrg, match.RunnerGroupId.Value, cancellationToken)
+            ? await GetRunnerGroupAsync(runner.GitHubOwnerOrOrg, match.RunnerGroupId.Value, accounts, cancellationToken)
             : match.RunnerGroupName == null ? null : new GitHubRunnerGroupInfo { Name = match.RunnerGroupName };
 
         return new GitHubRunnerInfo
@@ -127,9 +128,9 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         };
     }
 
-    private async Task<GitHubRunnerGroupInfo?> GetRunnerGroupAsync(string organization, long groupId, CancellationToken cancellationToken)
+    private async Task<GitHubRunnerGroupInfo?> GetRunnerGroupAsync(string organization, long groupId, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
-        var response = await SendAsync(HttpMethod.Get, $"https://api.github.com/orgs/{organization}/actions/runner-groups/{groupId}", cancellationToken);
+        var response = await SendBestAccountAsync(HttpMethod.Get, $"https://api.github.com/orgs/{organization}/actions/runner-groups/{groupId}", organization, accounts, cancellationToken);
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
             return new GitHubRunnerGroupInfo { Id = groupId, PermissionDenied = true };
         if (!response.IsSuccessStatusCode)
@@ -141,7 +142,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             return null;
 
         var allowsAll = string.Equals(group.Visibility, "all", StringComparison.OrdinalIgnoreCase);
-        var repositories = allowsAll ? [] : await GetRunnerGroupRepositoriesAsync(organization, groupId, cancellationToken);
+        var repositories = allowsAll ? [] : await GetRunnerGroupRepositoriesAsync(organization, groupId, accounts, cancellationToken);
         return new GitHubRunnerGroupInfo
         {
             Id = group.Id,
@@ -151,9 +152,9 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         };
     }
 
-    private async Task<IReadOnlyList<GitHubRepositoryInfo>> GetRunnerGroupRepositoriesAsync(string organization, long groupId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<GitHubRepositoryInfo>> GetRunnerGroupRepositoriesAsync(string organization, long groupId, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
-        var response = await SendAsync(HttpMethod.Get, $"https://api.github.com/orgs/{organization}/actions/runner-groups/{groupId}/repositories?per_page=100", cancellationToken);
+        var response = await SendBestAccountAsync(HttpMethod.Get, $"https://api.github.com/orgs/{organization}/actions/runner-groups/{groupId}/repositories?per_page=100", organization, accounts, cancellationToken);
         if (!response.IsSuccessStatusCode)
             return [];
 
@@ -162,7 +163,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         return parsed?.Repositories.Select(MapRepository).ToList() ?? [];
     }
 
-    private async Task<IReadOnlyList<GitHubRepositoryInfo>> GetRepositoriesAsync(IReadOnlyList<RunnerConfig> runners, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<GitHubRepositoryInfo>> GetRepositoriesAsync(IReadOnlyList<RunnerConfig> runners, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
         var configured = runners
             .Where(runner => !runner.IsOrganizationRunner && !string.IsNullOrWhiteSpace(runner.GitHubOwnerOrOrg) && !string.IsNullOrWhiteSpace(runner.RepositoryName))
@@ -177,18 +178,24 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         if (configured.Count > 0)
             return configured.DistinctBy(repository => repository.FullName).ToList();
 
-        var response = await SendAsync(HttpMethod.Get, "https://api.github.com/user/repos?per_page=20&sort=pushed&affiliation=owner,collaborator,organization_member", cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return [];
+        var result = new List<GitHubRepositoryInfo>();
+        foreach (var account in accounts)
+        {
+            var response = await SendAsync(HttpMethod.Get, "https://api.github.com/user/repos?per_page=20&sort=pushed&affiliation=owner,collaborator,organization_member", account.Token, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                continue;
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        var repositories = JsonSerializer.Deserialize<List<RepositoryResponse>>(body, JsonOptions.Default) ?? [];
-        return repositories.Select(MapRepository).Where(repository => !string.IsNullOrWhiteSpace(repository.FullName)).ToList();
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var repositories = JsonSerializer.Deserialize<List<RepositoryResponse>>(body, JsonOptions.Default) ?? [];
+            result.AddRange(repositories.Select(MapRepository).Where(repository => !string.IsNullOrWhiteSpace(repository.FullName)));
+        }
+
+        return result.DistinctBy(repository => repository.FullName).ToList();
     }
 
-    private async Task<IReadOnlyList<GitHubWorkflowRunInfo>> GetWorkflowRunsAsync(GitHubRepositoryInfo repository, IReadOnlyList<RunnerConfig> runners, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<GitHubWorkflowRunInfo>> GetWorkflowRunsAsync(GitHubRepositoryInfo repository, IReadOnlyList<RunnerConfig> runners, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
-        var response = await SendAsync(HttpMethod.Get, $"https://api.github.com/repos/{repository.FullName}/actions/runs?per_page=10", cancellationToken);
+        var response = await SendBestAccountAsync(HttpMethod.Get, $"https://api.github.com/repos/{repository.FullName}/actions/runs?per_page=10", repository.Owner, accounts, cancellationToken);
         if (!response.IsSuccessStatusCode)
             return [];
 
@@ -212,9 +219,40 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         return result;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAnyAccountAsync(HttpMethod method, string url, CancellationToken cancellationToken)
     {
-        var token = await _tokenStore.GetTokenAsync();
+        var accounts = await _tokenStore.GetAccountsAsync();
+        foreach (var account in accounts)
+        {
+            var response = await SendAsync(method, url, account.Token, cancellationToken);
+            if (response.IsSuccessStatusCode)
+                return response;
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+    }
+
+    private async Task<HttpResponseMessage> SendBestAccountAsync(HttpMethod method, string url, string ownerOrOrganization, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
+    {
+        var orderedAccounts = accounts
+            .OrderByDescending(account => account.Kind == GitHubAccountConnectionKind.Organization && string.Equals(account.Organization, ownerOrOrganization, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(account => account.Kind == GitHubAccountConnectionKind.Organization)
+            .ToList();
+
+        foreach (var account in orderedAccounts)
+        {
+            var response = await SendAsync(method, url, account.Token, cancellationToken);
+            if (response.IsSuccessStatusCode)
+                return response;
+            if (response.StatusCode is not (HttpStatusCode.Forbidden or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized))
+                return response;
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.Forbidden);
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string token, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(token))
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
 
@@ -276,6 +314,8 @@ internal static class GitHubInfoExtensions
         Name = info.Name,
         Status = info.Status,
         Busy = info.Busy,
+        IsLocalRunnerBusy = info.IsLocalRunnerBusy,
+        LocalActivityDescription = info.LocalActivityDescription,
         Labels = info.Labels,
         Owner = info.Owner,
         Repository = info.Repository,

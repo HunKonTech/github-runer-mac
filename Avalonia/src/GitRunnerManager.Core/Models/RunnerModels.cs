@@ -74,6 +74,28 @@ public class GitHubAccountInfo
     };
 }
 
+public enum GitHubAccountConnectionKind
+{
+    Personal,
+    Organization
+}
+
+public class GitHubAccountConnection
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public GitHubAccountConnectionKind Kind { get; init; } = GitHubAccountConnectionKind.Personal;
+    public string Login { get; init; } = string.Empty;
+    public string Organization { get; init; } = string.Empty;
+    public string DisplayName => Kind == GitHubAccountConnectionKind.Organization && !string.IsNullOrWhiteSpace(Organization)
+        ? $"{Login} · {Organization}"
+        : Login;
+}
+
+public class GitHubStoredAccount : GitHubAccountConnection
+{
+    public string Token { get; init; } = string.Empty;
+}
+
 public enum GitHubOwnerKind
 {
     User,
@@ -111,6 +133,8 @@ public class GitHubRunnerInfo
     public string Name { get; init; } = string.Empty;
     public string Status { get; init; } = "unknown";
     public bool Busy { get; init; }
+    public bool IsLocalRunnerBusy { get; init; }
+    public string LocalActivityDescription { get; init; } = string.Empty;
     public IReadOnlyList<string> Labels { get; init; } = [];
     public GitHubOwnerInfo Owner { get; init; } = new();
     public GitHubRepositoryInfo? Repository { get; init; }

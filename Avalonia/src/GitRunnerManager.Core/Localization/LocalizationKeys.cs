@@ -195,6 +195,15 @@ public static class LocalizationKeys
     public const string ActionsOAuthClientIdRequired = "actionsOAuthClientIdRequired";
     public const string ActionsSignedIn = "actionsSignedIn";
     public const string ActionsSignedOut = "actionsSignedOut";
+    public const string ActionsConnectedAccounts = "actionsConnectedAccounts";
+    public const string ActionsSignInPersonal = "actionsSignInPersonal";
+    public const string ActionsSignInOrganization = "actionsSignInOrganization";
+    public const string ActionsOrganizationLogin = "actionsOrganizationLogin";
+    public const string ActionsPersonalAccount = "actionsPersonalAccount";
+    public const string ActionsOrganizationAccount = "actionsOrganizationAccount";
+    public const string ActionsAutoRefreshActive = "actionsAutoRefreshActive";
+    public const string ActionsRunnerWorkingNow = "actionsRunnerWorkingNow";
+    public const string ActionsLocalRunnerActivity = "actionsLocalRunnerActivity";
     public const string ActionsStatusQueued = "actionsStatusQueued";
     public const string ActionsStatusInProgress = "actionsStatusInProgress";
     public const string ActionsStatusCompleted = "actionsStatusCompleted";

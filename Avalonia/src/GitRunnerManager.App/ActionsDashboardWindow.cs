@@ -89,11 +89,7 @@ public sealed class ActionsDashboardWindow : Window
         });
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        buttons.Children.Add(Button(LocalizationKeys.ButtonRefresh, async () => await _viewModel.RefreshAsync(), true));
-        if (_viewModel.Account.IsSignedIn)
-            buttons.Children.Add(Button(LocalizationKeys.GitHubSignOutButton, async () => await _viewModel.SignOutAsync()));
-        else
-            buttons.Children.Add(Button(LocalizationKeys.GitHubSignInButton, async () => await _viewModel.SignInAsync(OpenUrl), true));
+        buttons.Children.Add(Button(LocalizationKeys.ButtonRefresh, async () => await _viewModel.RefreshRealtimeAsync(), true));
         header.Children.Add(buttons);
         Grid.SetColumn(buttons, 1);
         panel.Children.Add(header);
@@ -102,15 +98,38 @@ public sealed class ActionsDashboardWindow : Window
         var content = (StackPanel)accountCard.Child!;
         content.Children.Add(Row(LocalizationKeys.UpdateStatusTitle, _viewModel.Account.IsSignedIn ? T(LocalizationKeys.GitHubSignedInAs, _viewModel.Account.Login ?? "") : T(LocalizationKeys.GitHubNotSignedIn), _viewModel.Account.IsSignedIn ? GreenBrush : GrayBrush));
         content.Children.Add(TextField(LocalizationKeys.GitHubOAuthClientIdTitle, _viewModel.OauthClientId, value => _viewModel.OauthClientId = value));
+        content.Children.Add(TextField(LocalizationKeys.ActionsOrganizationLogin, _viewModel.OrganizationLogin, value => _viewModel.OrganizationLogin = value));
+        var signInButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        signInButtons.Children.Add(Button(LocalizationKeys.ActionsSignInPersonal, async () => await _viewModel.SignInAsync(OpenUrl), true));
+        signInButtons.Children.Add(Button(LocalizationKeys.ActionsSignInOrganization, async () => await _viewModel.SignInOrganizationAsync(OpenUrl)));
+        content.Children.Add(signInButtons);
+        content.Children.Add(Secondary(T(LocalizationKeys.ActionsConnectedAccounts), PrimaryTextBrush));
+        foreach (var account in _viewModel.Accounts)
+            content.Children.Add(AccountRow(account));
         if (!string.IsNullOrWhiteSpace(_viewModel.DeviceCode))
             content.Children.Add(Row(LocalizationKeys.GitHubDeviceCode, _viewModel.DeviceCode, OrangeBrush));
         content.Children.Add(Row(LocalizationKeys.ActionsLastRefresh, _viewModel.LastRefreshTime?.ToLocalTime().ToString("HH:mm:ss") ?? "-", GrayBrush));
+        if (_viewModel.IsRealtimeRefreshActive)
+            content.Children.Add(Secondary(T(LocalizationKeys.ActionsAutoRefreshActive), GreenBrush));
         if (!_viewModel.PermissionStatus.HasRunnerAdminAccess)
             content.Children.Add(Secondary(T(LocalizationKeys.ActionsRunnerAdminPermissionRequired), OrangeBrush));
         if (!string.IsNullOrWhiteSpace(_viewModel.StatusMessage))
             content.Children.Add(Secondary(_viewModel.StatusMessage, _viewModel.StatusMessage.Contains("error", StringComparison.OrdinalIgnoreCase) ? RedBrush : SecondaryTextBrush));
         panel.Children.Add(accountCard);
         return panel;
+    }
+
+    private Control AccountRow(GitHubAccountConnection account)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        var kind = account.Kind == GitHubAccountConnectionKind.Organization
+            ? T(LocalizationKeys.ActionsOrganizationAccount)
+            : T(LocalizationKeys.ActionsPersonalAccount);
+        grid.Children.Add(Secondary($"{kind}: {account.DisplayName}", SecondaryTextBrush));
+        var button = Button(LocalizationKeys.GitHubSignOutButton, async () => await _viewModel.SignOutAsync(account.Id));
+        grid.Children.Add(button);
+        Grid.SetColumn(button, 1);
+        return grid;
     }
 
     private Control BuildRunnerSection()
@@ -136,6 +155,10 @@ public sealed class ActionsDashboardWindow : Window
             content.Children.Add(Row(LocalizationKeys.GitHubRunnerNameField, runner.Name, RunnerColor(runner)));
             content.Children.Add(Row(LocalizationKeys.GitHubRunnerScopeTitle, ScopeText(runner), GrayBrush));
             content.Children.Add(Row(LocalizationKeys.RunnerStatusTitle, RunnerStatusText(runner), RunnerColor(runner)));
+            if (runner.IsLocalRunnerBusy)
+                content.Children.Add(Row(LocalizationKeys.ActionsRunnerWorkingNow, runner.LocalActivityDescription, GreenBrush));
+            else if (!string.IsNullOrWhiteSpace(runner.LocalActivityDescription))
+                content.Children.Add(Row(LocalizationKeys.ActionsLocalRunnerActivity, runner.LocalActivityDescription, GrayBrush));
             content.Children.Add(Row(LocalizationKeys.RunnerLabelsTitle, runner.Labels.Count == 0 ? "-" : string.Join(", ", runner.Labels), GrayBrush));
             content.Children.Add(Row(LocalizationKeys.ActionsRunnerGroup, runner.Group?.Name ?? "-", GrayBrush));
             content.Children.Add(Row(LocalizationKeys.ActionsAllowedRepositories, AllowedRepositoriesText(runner), GrayBrush));
@@ -360,7 +383,7 @@ public sealed class ActionsDashboardWindow : Window
 
     private static IBrush RunnerColor(GitHubRunnerInfo runner)
     {
-        if (runner.Busy)
+        if (runner.Busy || runner.IsLocalRunnerBusy)
             return OrangeBrush;
         return runner.Status == "online" ? GreenBrush : runner.Status == "offline" ? RedBrush : GrayBrush;
     }
