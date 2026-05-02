@@ -22,5 +22,27 @@ dotnet publish "$PROJECT_FILE" \
   -p:Version="$VERSION" \
   -o "$PUBLISH_DIR"
 
+if command -v powershell.exe >/dev/null 2>&1; then
+  PUBLISH_DIR_WIN="$(cygpath -w "$PUBLISH_DIR")"
+  powershell.exe -NoProfile -Command "
+    \$publishDir = '$PUBLISH_DIR_WIN'
+    \$runtimeFiles = @(
+      'concrt140.dll',
+      'msvcp140.dll',
+      'msvcp140_1.dll',
+      'msvcp140_2.dll',
+      'vcruntime140.dll',
+      'vcruntime140_1.dll'
+    )
+
+    foreach (\$file in \$runtimeFiles) {
+      \$source = Join-Path \$env:WINDIR \"System32\\\$file\"
+      if (Test-Path \$source) {
+        Copy-Item -LiteralPath \$source -Destination \$publishDir -Force
+      }
+    }
+  "
+fi
+
 echo "Published to $PUBLISH_DIR"
 echo "Version: $VERSION"

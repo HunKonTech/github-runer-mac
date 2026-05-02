@@ -1,0 +1,27 @@
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectDir = Resolve-Path (Join-Path $scriptDir "..")
+$avaloniaDir = Join-Path $projectDir "Avalonia"
+$projectFile = Join-Path $avaloniaDir "src\GitRunnerManager.App\GitRunnerManager.App.csproj"
+
+Write-Host "=== Building and running GitRunnerManager Avalonia ==="
+
+if (-not (Test-Path $projectFile)) {
+    throw "Project file does not exist: $projectFile"
+}
+
+Push-Location $avaloniaDir
+try {
+    Write-Host "Restoring packages..."
+    dotnet restore $projectFile
+
+    Write-Host "Building Release configuration..."
+    dotnet build $projectFile -c Release
+
+    Write-Host "Starting application..."
+    dotnet run --project $projectFile -c Release
+}
+finally {
+    Pop-Location
+}
