@@ -45,4 +45,59 @@ public class RunnerFolderValidator : IRunnerFolderValidator
             Markers = markers
         };
     }
+
+    public RunnerFolderSetupValidationResult ValidateSetupFolder(string runnerDirectory, RunnerFolderSetupMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(runnerDirectory))
+            return new RunnerFolderSetupValidationResult { IsValid = false, Message = "Runner directory is required." };
+
+        if (mode == RunnerFolderSetupMode.ImportExisting)
+        {
+            var import = Validate(runnerDirectory);
+            return new RunnerFolderSetupValidationResult { IsValid = import.IsValid, Message = import.Message };
+        }
+
+        try
+        {
+            if (File.Exists(runnerDirectory))
+                return new RunnerFolderSetupValidationResult { IsValid = false, Message = "The selected path is a file." };
+
+            if (!Directory.Exists(runnerDirectory))
+            {
+                var parent = Directory.GetParent(Path.GetFullPath(runnerDirectory));
+                if (parent == null || !parent.Exists)
+                    return new RunnerFolderSetupValidationResult { IsValid = false, Message = "The parent folder does not exist." };
+
+                return CanWrite(parent.FullName);
+            }
+
+            var entries = Directory.EnumerateFileSystemEntries(runnerDirectory).Take(20).ToList();
+            if (entries.Any(entry => Path.GetFileName(entry) is ".runner" or ".credentials" or ".credentials_rsaparams"))
+                return new RunnerFolderSetupValidationResult { IsValid = false, Message = "The selected folder already contains a configured runner." };
+
+            if (entries.Count > 0 && !entries.Any(entry => Path.GetFileName(entry).StartsWith("actions-runner-", StringComparison.OrdinalIgnoreCase)))
+                return new RunnerFolderSetupValidationResult { IsValid = false, Message = "Choose an empty folder or an existing runner package folder." };
+
+            return CanWrite(runnerDirectory);
+        }
+        catch (Exception ex)
+        {
+            return new RunnerFolderSetupValidationResult { IsValid = false, Message = ex.Message };
+        }
+    }
+
+    private static RunnerFolderSetupValidationResult CanWrite(string folder)
+    {
+        var probe = Path.Combine(folder, $".grm-write-test-{Guid.NewGuid():N}");
+        try
+        {
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return new RunnerFolderSetupValidationResult { IsValid = true, Message = "Runner folder is ready." };
+        }
+        catch
+        {
+            return new RunnerFolderSetupValidationResult { IsValid = false, Message = "The selected folder is not writable." };
+        }
+    }
 }

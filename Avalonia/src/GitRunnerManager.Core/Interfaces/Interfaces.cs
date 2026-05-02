@@ -23,6 +23,7 @@ public interface IRunnerLogParser
 public interface IRunnerFolderValidator
 {
     RunnerFolderValidationResult Validate(string runnerDirectory);
+    RunnerFolderSetupValidationResult ValidateSetupFolder(string runnerDirectory, RunnerFolderSetupMode mode);
 }
 
 public interface IRunnerLogService
@@ -127,9 +128,14 @@ public interface IGitHubService
     Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
     Task<GitHubAccountConnection> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default);
     Task<GitHubAccountSnapshot> GetAccountAsync(CancellationToken cancellationToken = default);
+    Task<GitHubPermissionEvaluation> GetPermissionEvaluationAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitHubOwnerInfo>> GetOrganizationsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitHubRepositoryInfo>> GetUserRepositoriesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitHubRepositoryInfo>> GetOrganizationRepositoriesAsync(string organization, CancellationToken cancellationToken = default);
     Task SignOutAsync();
     Task<GitHubRegistrationToken> CreateRegistrationTokenAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default);
     Task<GitHubRunnerSetupResult> ConfigureRunnerAsync(GitHubRunnerSetupRequest request, GitHubRegistrationToken token, CancellationToken cancellationToken = default);
+    Task<GitHubRunnerSetupResult> SetupRunnerAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IRunnerManager : IDisposable

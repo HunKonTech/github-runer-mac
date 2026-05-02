@@ -56,7 +56,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         _networkMonitor = networkMonitor;
         _batteryMonitorFactory = batteryMonitorFactory;
         _runnerManager = new RunnerManager(controllerFactory, resourceMonitorFactory, preferencesFactory, localization);
-        _runnerManager.PropertyChanged += (_, _) => UpdateAggregateSnapshot();
+        _runnerManager.PropertyChanged += (_, e) => UpdateAggregateSnapshot(e.PropertyName == nameof(RunnerManager.Runners));
 
         var prefs = _preferencesFactory.Create();
         ControlMode = prefs.ControlMode;
@@ -303,7 +303,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         }
     }
 
-    private void UpdateAggregateSnapshot()
+    private void UpdateAggregateSnapshot(bool runnersChanged = false)
     {
         var snapshots = Runners.Select(runner => runner.Snapshot).ToList();
         var primary = snapshots.FirstOrDefault(snapshot => snapshot.Runner.IsRunning)
@@ -324,7 +324,8 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
             Error = snapshots.Select(snapshot => snapshot.ResourceUsage.Error).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
         };
         LastRefreshTime = snapshots.Select(snapshot => snapshot.LastRefreshTime).Where(value => value.HasValue).DefaultIfEmpty().Max();
-        OnPropertyChanged(nameof(Runners));
+        if (runnersChanged)
+            OnPropertyChanged(nameof(Runners));
     }
 
     public string PolicySummary => ControlMode switch

@@ -54,9 +54,23 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
         BatterySnapshot battery,
         RunnerControlMode globalControlMode)
     {
-        await _lock.WaitAsync();
+        if (_disposed)
+            return;
+
         try
         {
+            await _lock.WaitAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_disposed)
+                return;
+
             await ApplyDesiredStateAsync(network, battery, globalControlMode);
             RefreshSnapshot();
             LastErrorMessage = null;
@@ -163,9 +177,23 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
     private async Task RunActionAsync(Func<Task> action)
     {
-        await _lock.WaitAsync();
+        if (_disposed)
+            return;
+
         try
         {
+            await _lock.WaitAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_disposed)
+                return;
+
             await action();
             RefreshSnapshot();
             LastErrorMessage = null;

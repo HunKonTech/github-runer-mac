@@ -1,14 +1,18 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GitRunnerManager.Core.Interfaces;
 using GitRunnerManager.Core.Models;
+using GitRunnerManager.Core.Services;
 
 namespace GitRunnerManager.Platform.Services;
 
 public class GitHubService : IGitHubService, IGitHubAuthService
 {
+    private const string RunnerLatestReleaseUrl = "https://api.github.com/repos/actions/runner/releases/latest";
     private readonly ICredentialStore _credentialStore;
     private readonly HttpClient _httpClient;
 
@@ -27,7 +31,7 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["client_id"] = clientId,
-                ["scope"] = "repo admin:org"
+                ["scope"] = "repo admin:org read:org"
             }),
             cancellationToken);
 
@@ -155,6 +159,9 @@ public class GitHubService : IGitHubService, IGitHubAuthService
         if (!response.IsSuccessStatusCode)
             return new GitHubAccountInfo { IsSignedIn = false, Error = response.ReasonPhrase };
 
+        var scopes = response.Headers.TryGetValues("x-oauth-scopes", out var scopeValues)
+            ? scopeValues.SelectMany(value => value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)).ToList()
+            : [];
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var user = JsonSerializer.Deserialize<GitHubUserResponse>(json);
         return new GitHubAccountInfo
@@ -163,7 +170,8 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             Login = user?.Login,
             Name = user?.Name,
             AvatarUrl = user?.AvatarUrl,
-            HtmlUrl = user?.HtmlUrl
+            HtmlUrl = user?.HtmlUrl,
+            OAuthScopes = scopes
         };
     }
 
@@ -213,6 +221,37 @@ public class GitHubService : IGitHubService, IGitHubAuthService
         return _credentialStore.DeleteGitHubTokenAsync();
     }
 
+    public async Task<GitHubPermissionEvaluation> GetPermissionEvaluationAsync(CancellationToken cancellationToken = default)
+    {
+        var account = await GetAccountInfoAsync(cancellationToken);
+        return GitHubPermissionEvaluator.Evaluate(account.IsSignedIn, account.OAuthScopes);
+    }
+
+    public async Task<IReadOnlyList<GitHubOwnerInfo>> GetOrganizationsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await SendGitHubJsonAsync(HttpMethod.Get, "https://api.github.com/user/orgs?per_page=100", cancellationToken);
+        var orgs = JsonSerializer.Deserialize<List<GitHubOrganizationResponse>>(json, JsonOptions.Default) ?? [];
+        return orgs
+            .Where(org => !string.IsNullOrWhiteSpace(org.Login))
+            .Select(org => new GitHubOwnerInfo { Login = org.Login!, Kind = GitHubOwnerKind.Organization })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<GitHubRepositoryInfo>> GetUserRepositoriesAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await SendGitHubJsonAsync(HttpMethod.Get, "https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member", cancellationToken);
+        return MapRepositories(JsonSerializer.Deserialize<List<GitHubRepositoryResponse>>(json, JsonOptions.Default) ?? []);
+    }
+
+    public async Task<IReadOnlyList<GitHubRepositoryInfo>> GetOrganizationRepositoriesAsync(string organization, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(organization))
+            return [];
+
+        var json = await SendGitHubJsonAsync(HttpMethod.Get, $"https://api.github.com/orgs/{organization}/repos?per_page=100&sort=pushed", cancellationToken);
+        return MapRepositories(JsonSerializer.Deserialize<List<GitHubRepositoryResponse>>(json, JsonOptions.Default) ?? []);
+    }
+
     public async Task<IReadOnlyList<GitHubAccountConnection>> GetAccountsAsync(CancellationToken cancellationToken = default)
     {
         var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
@@ -256,6 +295,88 @@ public class GitHubService : IGitHubService, IGitHubAuthService
         };
     }
 
+    public async Task<GitHubRunnerSetupResult> SetupRunnerAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Scope == GitHubRunnerScope.Organization
+            && request.RepositoryAccessMode == RunnerRepositoryAccessMode.SelectedRepositories
+            && request.SelectedRepositories.Count > 0)
+        {
+            return await SetupRepositoryRunnersAsync(request, cancellationToken);
+        }
+
+        if (request.Scope == GitHubRunnerScope.Repository && request.SelectedRepositories.Count > 1)
+            return await SetupRepositoryRunnersAsync(request, cancellationToken);
+
+        if (request.Scope == GitHubRunnerScope.Repository && request.SelectedRepositories.Count == 1)
+            request = CopyForRepository(request, request.SelectedRepositories[0], 0, request.SelectedRepositories.Count);
+
+        if (request.FolderSetupMode == RunnerFolderSetupMode.CreateNew)
+            await EnsureRunnerPackageAsync(request.RunnerDirectory, cancellationToken);
+
+        var token = await CreateRegistrationTokenAsync(request, cancellationToken);
+        return await ConfigureRunnerAsync(request, token, cancellationToken);
+    }
+
+    private async Task<GitHubRunnerSetupResult> SetupRepositoryRunnersAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken)
+    {
+        var profiles = new List<RunnerConfig>();
+        for (var index = 0; index < request.SelectedRepositories.Count; index++)
+        {
+            var repositoryRequest = CopyForRepository(request, request.SelectedRepositories[index], index, request.SelectedRepositories.Count);
+            if (repositoryRequest.FolderSetupMode == RunnerFolderSetupMode.CreateNew)
+                await EnsureRunnerPackageAsync(repositoryRequest.RunnerDirectory, cancellationToken);
+
+            var token = await CreateRegistrationTokenAsync(repositoryRequest, cancellationToken);
+            var result = await ConfigureRunnerAsync(repositoryRequest, token, cancellationToken);
+            if (!result.Succeeded || result.RunnerProfile == null)
+                return new GitHubRunnerSetupResult
+                {
+                    Succeeded = false,
+                    Message = string.IsNullOrWhiteSpace(result.Message)
+                        ? $"Runner setup failed for {repositoryRequest.OwnerOrOrg}/{repositoryRequest.RepositoryName}."
+                        : result.Message,
+                    RunnerProfiles = profiles
+                };
+
+            profiles.Add(result.RunnerProfile);
+        }
+
+        return new GitHubRunnerSetupResult
+        {
+            Succeeded = true,
+            Message = profiles.Count == 1 ? "Runner configured successfully." : $"{profiles.Count} runners configured successfully.",
+            RunnerProfile = profiles.FirstOrDefault(),
+            RunnerProfiles = profiles
+        };
+    }
+
+    private static GitHubRunnerSetupRequest CopyForRepository(GitHubRunnerSetupRequest request, GitHubRepositoryReference repository, int index, int total)
+    {
+        var suffix = total <= 1 ? "" : $"-{SafeName(repository.Repo)}";
+        var directory = total <= 1
+            ? request.RunnerDirectory
+            : Path.Combine(request.RunnerDirectory, SafeName(repository.FullName));
+        return new GitHubRunnerSetupRequest
+        {
+            Scope = GitHubRunnerScope.Repository,
+            RepositoryAccessMode = RunnerRepositoryAccessMode.SelectedRepositories,
+            FolderSetupMode = request.FolderSetupMode,
+            OwnerOrOrg = repository.Owner,
+            RepositoryName = repository.Repo,
+            RunnerDirectory = directory,
+            RunnerName = total <= 1 ? request.RunnerName : $"{request.RunnerName}{suffix}",
+            Labels = [..request.Labels],
+            SelectedRepositories = [repository]
+        };
+    }
+
+    private static string SafeName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var clean = new string(value.Select(ch => invalid.Contains(ch) || ch == '/' || ch == '\\' ? '-' : ch).ToArray()).Trim('-');
+        return string.IsNullOrWhiteSpace(clean) ? "runner" : clean;
+    }
+
     public async Task<GitHubRunnerSetupResult> ConfigureRunnerAsync(GitHubRunnerSetupRequest request, GitHubRegistrationToken token, CancellationToken cancellationToken = default)
     {
         var configScript = GetConfigScript(request.RunnerDirectory);
@@ -287,21 +408,134 @@ public class GitHubService : IGitHubService, IGitHubAuthService
         var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
         var succeeded = process.ExitCode == 0;
+        var profile = succeeded ? new RunnerConfig
+        {
+            DisplayName = runnerName,
+            RunnerDirectory = request.RunnerDirectory,
+            GitHubOwnerOrOrg = request.OwnerOrOrg,
+            RepositoryName = request.Scope == GitHubRunnerScope.Repository ? request.RepositoryName : null,
+            IsOrganizationRunner = request.Scope == GitHubRunnerScope.Organization,
+            Labels = [..request.Labels],
+            IsEnabled = true
+        } : null;
         return new GitHubRunnerSetupResult
         {
             Succeeded = succeeded,
             Message = succeeded ? "Runner configured successfully." : $"{stdout}\n{stderr}".Trim(),
-            RunnerProfile = succeeded ? new RunnerConfig
-            {
-                DisplayName = runnerName,
-                RunnerDirectory = request.RunnerDirectory,
-                GitHubOwnerOrOrg = request.OwnerOrOrg,
-                RepositoryName = request.Scope == GitHubRunnerScope.Repository ? request.RepositoryName : null,
-                IsOrganizationRunner = request.Scope == GitHubRunnerScope.Organization,
-                Labels = [..request.Labels],
-                IsEnabled = true
-            } : null
+            RunnerProfile = profile,
+            RunnerProfiles = profile == null ? [] : [profile]
         };
+    }
+
+    private async Task EnsureRunnerPackageAsync(string runnerDirectory, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(runnerDirectory);
+        if (GetConfigScript(runnerDirectory) != null)
+            return;
+
+        var releaseJson = await SendAnonymousJsonAsync(RunnerLatestReleaseUrl, cancellationToken);
+        var release = JsonSerializer.Deserialize<GitHubRunnerReleaseResponse>(releaseJson, JsonOptions.Default);
+        var asset = release?.Assets.FirstOrDefault(asset => IsCurrentPlatformRunnerAsset(asset.Name));
+        if (asset == null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl))
+            throw new InvalidOperationException("Could not find a GitHub Actions runner package for this platform.");
+
+        var extension = asset.Name?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) == true ? ".zip" : ".tar.gz";
+        var archivePath = Path.Combine(Path.GetTempPath(), $"actions-runner-{Guid.NewGuid():N}{extension}");
+        await using (var stream = await _httpClient.GetStreamAsync(asset.BrowserDownloadUrl, cancellationToken))
+        await using (var output = File.Create(archivePath))
+        {
+            await stream.CopyToAsync(output, cancellationToken);
+        }
+
+        if (extension == ".zip")
+        {
+            ZipFile.ExtractToDirectory(archivePath, runnerDirectory, overwriteFiles: true);
+            return;
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "tar",
+            Arguments = $"-xzf \"{archivePath}\" -C \"{runnerDirectory}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var process = Process.Start(startInfo);
+        if (process == null)
+            throw new InvalidOperationException("Could not start tar to extract the runner package.");
+
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException("Could not extract the runner package.");
+    }
+
+    private async Task<string> SendGitHubJsonAsync(HttpMethod method, string url, CancellationToken cancellationToken)
+    {
+        var token = await _credentialStore.GetGitHubTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Sign in to GitHub first.");
+
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"GitHub API request failed: {(int)response.StatusCode} {content}");
+
+        return content;
+    }
+
+    private async Task<string> SendAnonymousJsonAsync(string url, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"GitHub API request failed: {(int)response.StatusCode} {content}");
+
+        return content;
+    }
+
+    private static IReadOnlyList<GitHubRepositoryInfo> MapRepositories(IEnumerable<GitHubRepositoryResponse> repositories)
+    {
+        return repositories
+            .Select(repository => new GitHubRepositoryInfo
+            {
+                Owner = repository.Owner?.Login ?? "",
+                Name = repository.Name ?? "",
+                FullName = repository.FullName ?? "",
+                HtmlUrl = repository.HtmlUrl ?? "",
+                ActionsEnabled = repository.HasActions
+            })
+            .Where(repository => !string.IsNullOrWhiteSpace(repository.Owner) && !string.IsNullOrWhiteSpace(repository.Name))
+            .ToList();
+    }
+
+    private static bool IsCurrentPlatformRunnerAsset(string? assetName)
+    {
+        if (string.IsNullOrWhiteSpace(assetName))
+            return false;
+
+        var name = assetName.ToLowerInvariant();
+        var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+        var arch = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X64 => "x64",
+            Architecture.X86 => "x86",
+            _ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()
+        };
+
+        return name.Contains("actions-runner")
+            && name.Contains(os)
+            && name.Contains(arch)
+            && (name.EndsWith(".tar.gz") || name.EndsWith(".zip"));
     }
 
     private static string? GetConfigScript(string runnerDirectory)
@@ -362,4 +596,44 @@ internal class GitHubRegistrationTokenResponse
     public string? Token { get; set; }
     [JsonPropertyName("expires_at")]
     public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+internal class GitHubOrganizationResponse
+{
+    [JsonPropertyName("login")]
+    public string? Login { get; set; }
+}
+
+internal class GitHubRepositoryResponse
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+    [JsonPropertyName("full_name")]
+    public string? FullName { get; set; }
+    [JsonPropertyName("html_url")]
+    public string? HtmlUrl { get; set; }
+    [JsonPropertyName("has_actions")]
+    public bool HasActions { get; set; } = true;
+    [JsonPropertyName("owner")]
+    public GitHubRepositoryOwnerResponse? Owner { get; set; }
+}
+
+internal class GitHubRepositoryOwnerResponse
+{
+    [JsonPropertyName("login")]
+    public string? Login { get; set; }
+}
+
+internal class GitHubRunnerReleaseResponse
+{
+    [JsonPropertyName("assets")]
+    public List<GitHubRunnerReleaseAssetResponse> Assets { get; set; } = [];
+}
+
+internal class GitHubRunnerReleaseAssetResponse
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+    [JsonPropertyName("browser_download_url")]
+    public string? BrowserDownloadUrl { get; set; }
 }

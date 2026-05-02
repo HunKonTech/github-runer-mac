@@ -72,6 +72,7 @@ public class GitHubAccountSnapshot
     public bool IsSignedIn { get; init; }
     public string? Login { get; init; }
     public string? Error { get; init; }
+    public IReadOnlyList<string> OAuthScopes { get; init; } = [];
 }
 
 public class GitHubAccountInfo
@@ -82,12 +83,14 @@ public class GitHubAccountInfo
     public string? AvatarUrl { get; init; }
     public string? HtmlUrl { get; init; }
     public string? Error { get; init; }
+    public IReadOnlyList<string> OAuthScopes { get; init; } = [];
 
     public GitHubAccountSnapshot ToSnapshot() => new()
     {
         IsSignedIn = IsSignedIn,
         Login = Login,
-        Error = Error
+        Error = Error,
+        OAuthScopes = OAuthScopes
     };
 }
 
@@ -143,6 +146,56 @@ public class GitHubRepositoryReference
     public string FullName => string.IsNullOrWhiteSpace(Owner) || string.IsNullOrWhiteSpace(Repo)
         ? string.Empty
         : $"{Owner}/{Repo}";
+}
+
+public enum RunnerRepositoryAccessMode
+{
+    AllRepositories,
+    SelectedRepositories
+}
+
+public enum RunnerFolderSetupMode
+{
+    CreateNew,
+    ImportExisting
+}
+
+public class RunnerSetupDraft
+{
+    public GitHubRunnerScope Scope { get; set; } = GitHubRunnerScope.Repository;
+    public RunnerRepositoryAccessMode RepositoryAccessMode { get; set; } = RunnerRepositoryAccessMode.AllRepositories;
+    public RunnerFolderSetupMode FolderSetupMode { get; set; } = RunnerFolderSetupMode.CreateNew;
+    public string AccountLogin { get; set; } = string.Empty;
+    public string OwnerOrOrg { get; set; } = string.Empty;
+    public List<GitHubRepositoryInfo> SelectedRepositories { get; set; } = [];
+    public string RunnerName { get; set; } = string.Empty;
+    public List<string> Labels { get; set; } = [];
+    public string RunnerDirectory { get; set; } = string.Empty;
+}
+
+public class RunnerSetupValidationResult
+{
+    public bool IsValid { get; init; }
+    public IReadOnlyList<string> Errors { get; init; } = [];
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+
+public class RunnerFolderSetupValidationResult
+{
+    public bool IsValid { get; init; }
+    public string Message { get; init; } = string.Empty;
+}
+
+public class GitHubPermissionEvaluation
+{
+    public bool IsSignedIn { get; init; }
+    public bool HasRepoScope { get; init; }
+    public bool HasAdminOrgScope { get; init; }
+    public bool HasUserOrReadOrgScope { get; init; }
+    public IReadOnlyList<string> Scopes { get; init; } = [];
+    public IReadOnlyList<string> MissingRepositoryRunnerScopes { get; init; } = [];
+    public IReadOnlyList<string> MissingOrganizationRunnerScopes { get; init; } = [];
+    public string Message { get; init; } = string.Empty;
 }
 
 public class GitHubRunnerGroupInfo
@@ -284,11 +337,14 @@ public class GitHubRegistrationToken
 public class GitHubRunnerSetupRequest
 {
     public GitHubRunnerScope Scope { get; init; }
+    public RunnerRepositoryAccessMode RepositoryAccessMode { get; init; } = RunnerRepositoryAccessMode.AllRepositories;
+    public RunnerFolderSetupMode FolderSetupMode { get; init; } = RunnerFolderSetupMode.CreateNew;
     public string OwnerOrOrg { get; init; } = string.Empty;
     public string RepositoryName { get; init; } = string.Empty;
     public string RunnerDirectory { get; init; } = string.Empty;
     public string RunnerName { get; init; } = string.Empty;
     public List<string> Labels { get; init; } = [];
+    public List<GitHubRepositoryReference> SelectedRepositories { get; init; } = [];
 
     public string GitHubUrl => Scope == GitHubRunnerScope.Organization
         ? $"https://github.com/{OwnerOrOrg}"
@@ -300,6 +356,7 @@ public class GitHubRunnerSetupResult
     public bool Succeeded { get; init; }
     public string Message { get; init; } = string.Empty;
     public RunnerConfig? RunnerProfile { get; init; }
+    public IReadOnlyList<RunnerConfig> RunnerProfiles { get; init; } = [];
 }
 
 public enum RunnerStatusKind
