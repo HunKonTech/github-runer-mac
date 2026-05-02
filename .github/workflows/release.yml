@@ -279,7 +279,7 @@ jobs:
         working-directory: Avalonia
 
       - name: Package Avalonia Windows app
-        shell: bash
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
@@ -316,7 +316,7 @@ jobs:
         working-directory: Avalonia
 
       - name: Package Avalonia Windows ARM64 app
-        shell: bash
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Compress-Archive -Path publish/win-arm64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-arm64-${{ needs.prepare.outputs.package_version }}.zip" -Force
