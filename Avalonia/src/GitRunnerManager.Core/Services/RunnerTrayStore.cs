@@ -285,7 +285,11 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         await _reconcileLock.WaitAsync();
         try
         {
-            await _runnerManager.RefreshAllAsync(NetworkSnapshot, BatterySnapshot, ControlMode);
+            var networkSnapshot = NetworkSnapshot;
+            var batterySnapshot = BatterySnapshot;
+            var controlMode = ControlMode;
+
+            await Task.Run(() => _runnerManager.RefreshAllAsync(networkSnapshot, batterySnapshot, controlMode));
             UpdateAggregateSnapshot();
             LastErrorMessage = Runners.Select(runner => runner.LastErrorMessage).FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
         }

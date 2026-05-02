@@ -2,7 +2,7 @@ using GitRunnerManager.Core.Interfaces;
 using GitRunnerManager.Core.Models;
 using System.Diagnostics;
 using System.Security;
-using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace GitRunnerManager.Platform.Services;
 
@@ -15,9 +15,29 @@ public class LaunchAtLoginService : ILaunchAtLoginService
 
     public LaunchAtLoginStatus GetStatus()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        if (OperatingSystem.IsMacOS())
             return File.Exists(MacOsLaunchAgentPath) ? LaunchAtLoginStatus.Enabled : LaunchAtLoginStatus.Disabled;
 
+        if (OperatingSystem.IsWindows())
+            return GetWindowsStatus();
+
+        return LaunchAtLoginStatus.Disabled;
+    }
+
+    public async Task<bool> SetEnabledAsync(bool enabled)
+    {
+        if (OperatingSystem.IsMacOS())
+            return await SetMacOsEnabledAsync(enabled);
+
+        if (OperatingSystem.IsWindows())
+            return await SetWindowsEnabledAsync(enabled);
+
+        return false;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static LaunchAtLoginStatus GetWindowsStatus()
+    {
         try
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath);
@@ -34,11 +54,9 @@ public class LaunchAtLoginService : ILaunchAtLoginService
         }
     }
 
-    public async Task<bool> SetEnabledAsync(bool enabled)
+    [SupportedOSPlatform("windows")]
+    private static async Task<bool> SetWindowsEnabledAsync(bool enabled)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return await SetMacOsEnabledAsync(enabled);
-
         return await Task.Run(() =>
         {
             try

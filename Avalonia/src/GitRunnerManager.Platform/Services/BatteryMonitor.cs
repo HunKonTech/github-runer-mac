@@ -1,4 +1,5 @@
 using System.Management;
+using System.Runtime.Versioning;
 using GitRunnerManager.Core.Interfaces;
 using GitRunnerManager.Core.Models;
 
@@ -46,6 +47,7 @@ public class BatteryMonitor : IBatteryMonitor, IDisposable
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private BatterySnapshot GetWindowsBattery()
     {
         try
