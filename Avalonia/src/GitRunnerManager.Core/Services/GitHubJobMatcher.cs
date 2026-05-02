@@ -6,10 +6,30 @@ public static class GitHubJobMatcher
 {
     public static bool IsRunningOnLocalRunner(GitHubWorkflowJobInfo job, IEnumerable<RunnerConfig> runners)
     {
-        if (string.IsNullOrWhiteSpace(job.RunnerName))
-            return false;
+        return Match(job, runners, null, RunnerResourceUsage.Zero).Confidence != GitHubCorrelationConfidence.Unknown;
+    }
 
-        return runners.Any(runner => Matches(job.RunnerName, runner));
+    public static GitHubJobCorrelation Match(
+        GitHubWorkflowJobInfo job,
+        IEnumerable<RunnerConfig> runners,
+        RunnerActivitySnapshot? activity,
+        RunnerResourceUsage resourceUsage,
+        DateTimeOffset? now = null)
+    {
+        var runnerList = runners.ToList();
+        if (!string.IsNullOrWhiteSpace(job.RunnerName) && runnerList.Any(runner => Matches(job.RunnerName, runner)))
+            return new GitHubJobCorrelation(GitHubCorrelationConfidence.Exact, "GitHub job runner_name matches a configured local runner name.");
+
+        var localJobName = activity?.CurrentJobName;
+        if (!string.IsNullOrWhiteSpace(localJobName) && NamesMatch(localJobName, job.Name))
+            return new GitHubJobCorrelation(GitHubCorrelationConfidence.Probable, "Local runner log job name matches the GitHub job name.");
+
+        var isActiveJob = job.Status is "in_progress" or "queued" or "waiting" or "requested";
+        var localRunnerBusy = resourceUsage.IsJobActive || activity?.Kind == RunnerActivityKind.Busy;
+        if (isActiveJob && localRunnerBusy && TimeOverlaps(job, now ?? DateTimeOffset.Now))
+            return new GitHubJobCorrelation(GitHubCorrelationConfidence.Possible, "Local runner is busy and job timing overlaps, but GitHub did not expose a matching runner_name.");
+
+        return new GitHubJobCorrelation(GitHubCorrelationConfidence.Unknown, "No reliable local runner correlation was found.");
     }
 
     public static bool Matches(string runnerName, RunnerConfig runner)
@@ -27,6 +47,27 @@ public static class GitHubJobMatcher
         return candidates
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Any(value => string.Equals(value!.Trim(), runnerName.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool NamesMatch(string left, string right)
+    {
+        return string.Equals(NormalizeName(left), NormalizeName(right), StringComparison.OrdinalIgnoreCase) ||
+            NormalizeName(left).Contains(NormalizeName(right), StringComparison.OrdinalIgnoreCase) ||
+            NormalizeName(right).Contains(NormalizeName(left), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeName(string value)
+    {
+        return value.Trim().Replace(" / ", "/").Replace(" ", "");
+    }
+
+    private static bool TimeOverlaps(GitHubWorkflowJobInfo job, DateTimeOffset now)
+    {
+        if (job.StartedAt == null)
+            return true;
+
+        var completedAt = job.CompletedAt ?? now;
+        return completedAt >= now.AddMinutes(-30) && job.StartedAt <= now.AddMinutes(5);
     }
 
     private static string? ReadRunnerName(string runnerDirectory)
@@ -47,3 +88,5 @@ public static class GitHubJobMatcher
         return firstQuote >= 0 && secondQuote > firstQuote ? text[(firstQuote + 1)..secondQuote] : null;
     }
 }
+
+public readonly record struct GitHubJobCorrelation(GitHubCorrelationConfidence Confidence, string Reason);

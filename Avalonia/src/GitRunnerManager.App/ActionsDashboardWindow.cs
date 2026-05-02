@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using GitRunnerManager.Core.Localization;
 using GitRunnerManager.Core.Models;
 
@@ -26,12 +28,14 @@ public sealed class ActionsDashboardWindow : Window
 
     private readonly ActionsDashboardViewModel _viewModel;
     private readonly ILocalizationService _localization;
+    private readonly Action _openGitHubAccountSettings;
     private bool _buildQueued;
 
-    public ActionsDashboardWindow(ActionsDashboardViewModel viewModel, ILocalizationService localization)
+    public ActionsDashboardWindow(ActionsDashboardViewModel viewModel, ILocalizationService localization, Action openGitHubAccountSettings)
     {
         _viewModel = viewModel;
         _localization = localization;
+        _openGitHubAccountSettings = openGitHubAccountSettings;
         Width = 1120;
         Height = 760;
         MinWidth = 920;
@@ -89,7 +93,9 @@ public sealed class ActionsDashboardWindow : Window
         });
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        buttons.Children.Add(Button(LocalizationKeys.ButtonRefresh, async () => await _viewModel.RefreshRealtimeAsync(), true));
+        buttons.Children.Add(ButtonKey(LocalizationKeys.ButtonRefresh, async () => await _viewModel.RefreshRealtimeAsync(), true));
+        buttons.Children.Add(ButtonKey(LocalizationKeys.ActionsCopyForLlm, CopyMarkdownAsync, true));
+        buttons.Children.Add(ButtonKey(LocalizationKeys.ActionsCopyJson, CopyJsonAsync));
         header.Children.Add(buttons);
         Grid.SetColumn(buttons, 1);
         panel.Children.Add(header);
@@ -97,39 +103,33 @@ public sealed class ActionsDashboardWindow : Window
         var accountCard = Card(new StackPanel { Spacing = 8 });
         var content = (StackPanel)accountCard.Child!;
         content.Children.Add(Row(LocalizationKeys.UpdateStatusTitle, _viewModel.Account.IsSignedIn ? T(LocalizationKeys.GitHubSignedInAs, _viewModel.Account.Login ?? "") : T(LocalizationKeys.GitHubNotSignedIn), _viewModel.Account.IsSignedIn ? GreenBrush : GrayBrush));
-        content.Children.Add(TextField(LocalizationKeys.GitHubOAuthClientIdTitle, _viewModel.OauthClientId, value => _viewModel.OauthClientId = value));
-        content.Children.Add(TextField(LocalizationKeys.ActionsOrganizationLogin, _viewModel.OrganizationLogin, value => _viewModel.OrganizationLogin = value));
-        var signInButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        signInButtons.Children.Add(Button(LocalizationKeys.ActionsSignInPersonal, async () => await _viewModel.SignInAsync(OpenUrl), true));
-        signInButtons.Children.Add(Button(LocalizationKeys.ActionsSignInOrganization, async () => await _viewModel.SignInOrganizationAsync(OpenUrl)));
-        content.Children.Add(signInButtons);
-        content.Children.Add(Secondary(T(LocalizationKeys.ActionsConnectedAccounts), PrimaryTextBrush));
-        foreach (var account in _viewModel.Accounts)
-            content.Children.Add(AccountRow(account));
-        if (!string.IsNullOrWhiteSpace(_viewModel.DeviceCode))
-            content.Children.Add(Row(LocalizationKeys.GitHubDeviceCode, _viewModel.DeviceCode, OrangeBrush));
+        if (!_viewModel.Account.IsSignedIn)
+            content.Children.Add(ButtonKey(LocalizationKeys.ActionsOpenGitHubAccountSettings, () =>
+            {
+                _openGitHubAccountSettings();
+                return Task.CompletedTask;
+            }, true));
+        else if (_viewModel.Accounts.Count > 0)
+            content.Children.Add(Secondary($"{T(LocalizationKeys.ActionsConnectedAccounts)}: {string.Join(", ", _viewModel.Accounts.Select(account => account.DisplayName))}", SecondaryTextBrush));
         content.Children.Add(Row(LocalizationKeys.ActionsLastRefresh, _viewModel.LastRefreshTime?.ToLocalTime().ToString("HH:mm:ss") ?? "-", GrayBrush));
         if (_viewModel.IsRealtimeRefreshActive)
             content.Children.Add(Secondary(T(LocalizationKeys.ActionsAutoRefreshActive), GreenBrush));
+        content.Children.Add(Card(new StackPanel
+        {
+            Spacing = 5,
+            Children =
+            {
+                new TextBlock { Text = T(LocalizationKeys.ActionsPermissionsTitle), FontSize = 13, FontWeight = FontWeight.Bold, Foreground = PrimaryTextBrush, TextWrapping = TextWrapping.Wrap },
+                Secondary(T(LocalizationKeys.ActionsPermissionsBody), SecondaryTextBrush),
+                Secondary(PermissionAvailabilityText(), PermissionColor())
+            }
+        }));
         if (!_viewModel.PermissionStatus.HasRunnerAdminAccess)
             content.Children.Add(Secondary(T(LocalizationKeys.ActionsRunnerAdminPermissionRequired), OrangeBrush));
         if (!string.IsNullOrWhiteSpace(_viewModel.StatusMessage))
             content.Children.Add(Secondary(_viewModel.StatusMessage, _viewModel.StatusMessage.Contains("error", StringComparison.OrdinalIgnoreCase) ? RedBrush : SecondaryTextBrush));
         panel.Children.Add(accountCard);
         return panel;
-    }
-
-    private Control AccountRow(GitHubAccountConnection account)
-    {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        var kind = account.Kind == GitHubAccountConnectionKind.Organization
-            ? T(LocalizationKeys.ActionsOrganizationAccount)
-            : T(LocalizationKeys.ActionsPersonalAccount);
-        grid.Children.Add(Secondary($"{kind}: {account.DisplayName}", SecondaryTextBrush));
-        var button = Button(LocalizationKeys.GitHubSignOutButton, async () => await _viewModel.SignOutAsync(account.Id));
-        grid.Children.Add(button);
-        Grid.SetColumn(button, 1);
-        return grid;
     }
 
     private Control BuildRunnerSection()
@@ -171,6 +171,7 @@ public sealed class ActionsDashboardWindow : Window
     private Control BuildRunsSection()
     {
         var panel = Section(LocalizationKeys.ActionsWorkflowRunsSection);
+        panel.Children.Add(BuildRepositoryFilter());
         if (_viewModel.IsLoading)
             panel.Children.Add(Secondary(T(LocalizationKeys.ActionsLoading), OrangeBrush));
         if (_viewModel.WorkflowRuns.Count == 0 && !_viewModel.IsLoading)
@@ -179,20 +180,23 @@ public sealed class ActionsDashboardWindow : Window
         foreach (var run in _viewModel.WorkflowRuns)
         {
             var card = Card(new StackPanel { Spacing = 4 }, run.IsActive ? OrangeBrush : CardBorderBrush);
+            card.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            card.PointerPressed += (_, _) => _viewModel.SelectedRun = run;
             var content = (StackPanel)card.Child!;
             content.Children.Add(new TextBlock { Text = $"{run.RepositoryFullName} · {run.WorkflowName}", FontSize = 14, FontWeight = FontWeight.Bold, Foreground = PrimaryTextBrush, TextWrapping = TextWrapping.Wrap });
             content.Children.Add(Secondary($"{run.Branch} · {WorkflowStatusText(run.Status)} · {WorkflowConclusionText(run.Conclusion)}", run.IsActive ? OrangeBrush : SecondaryTextBrush));
+            content.Children.Add(Secondary($"#{run.RunNumber} · {T(LocalizationKeys.ActionsCorrelationConfidence)}: {CorrelationText(run.CorrelationConfidence)}", run.IsRunningOnThisRunner ? GreenBrush : SecondaryTextBrush));
             content.Children.Add(Secondary($"{FormatDate(run.StartedAt)} · {FormatDuration(run.Duration)} · {run.Actor}", SecondaryTextBrush));
             if (run.IsRunningOnThisRunner)
                 content.Children.Add(Secondary(T(LocalizationKeys.ActionsRunningOnThisRunner), GreenBrush));
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            row.Children.Add(Button(LocalizationKeys.ActionsSelectRun, () =>
+            row.Children.Add(ButtonKey(LocalizationKeys.ActionsSelectRun, () =>
             {
                 _viewModel.SelectedRun = run;
                 return Task.CompletedTask;
             }));
             if (!string.IsNullOrWhiteSpace(run.HtmlUrl))
-                row.Children.Add(Button(LocalizationKeys.ActionsOpenInBrowser, () =>
+                row.Children.Add(ButtonKey(LocalizationKeys.ActionsOpenInBrowser, () =>
                 {
                     OpenUrl(run.HtmlUrl);
                     return Task.CompletedTask;
@@ -214,6 +218,12 @@ public sealed class ActionsDashboardWindow : Window
         }
 
         panel.Children.Add(Secondary($"{_viewModel.SelectedRun.RepositoryFullName} · {_viewModel.SelectedRun.WorkflowName}", PrimaryTextBrush));
+        var exportRow = new WrapPanel();
+        exportRow.Children.Add(ButtonKey(LocalizationKeys.ActionsCopyForLlm, CopyMarkdownAsync, true));
+        exportRow.Children.Add(ButtonKey(LocalizationKeys.ActionsCopyJson, CopyJsonAsync));
+        exportRow.Children.Add(ButtonKey(LocalizationKeys.ActionsExportMarkdown, ExportMarkdownAsync));
+        exportRow.Children.Add(ButtonKey(LocalizationKeys.ActionsExportJson, ExportJsonAsync));
+        panel.Children.Add(exportRow);
         foreach (var job in _viewModel.SelectedJobs)
         {
             var card = Card(new StackPanel { Spacing = 4 }, job.IsRunningOnThisRunner ? GreenBrush : CardBorderBrush);
@@ -221,9 +231,14 @@ public sealed class ActionsDashboardWindow : Window
             content.Children.Add(new TextBlock { Text = job.Name, FontSize = 14, FontWeight = FontWeight.Bold, Foreground = PrimaryTextBrush, TextWrapping = TextWrapping.Wrap });
             content.Children.Add(Secondary($"{WorkflowStatusText(job.Status)} · {WorkflowConclusionText(job.Conclusion)}", SecondaryTextBrush));
             content.Children.Add(Secondary($"{T(LocalizationKeys.GitHubRunnerNameField)}: {(string.IsNullOrWhiteSpace(job.RunnerName) ? "-" : job.RunnerName)}", job.IsRunningOnThisRunner ? GreenBrush : SecondaryTextBrush));
+            content.Children.Add(Secondary($"{T(LocalizationKeys.ActionsCorrelationConfidence)}: {CorrelationText(job.CorrelationConfidence)}", job.IsRunningOnThisRunner ? GreenBrush : SecondaryTextBrush));
+            if (!string.IsNullOrWhiteSpace(job.CorrelationReason))
+                content.Children.Add(Secondary(job.CorrelationReason, SecondaryTextBrush));
             content.Children.Add(Secondary($"{FormatDate(job.StartedAt)} - {FormatDate(job.CompletedAt)}", SecondaryTextBrush));
+            if (job.Steps.Count > 0)
+                content.Children.Add(Secondary($"{T(LocalizationKeys.ActionsSteps)}: {StepSummary(job)}", SecondaryTextBrush));
             if (!string.IsNullOrWhiteSpace(job.HtmlUrl))
-                content.Children.Add(Button(LocalizationKeys.ActionsOpenInBrowser, () => { OpenUrl(job.HtmlUrl); return Task.CompletedTask; }));
+                content.Children.Add(ButtonKey(LocalizationKeys.ActionsOpenInBrowser, () => { OpenUrl(job.HtmlUrl); return Task.CompletedTask; }));
             panel.Children.Add(card);
         }
 
@@ -290,11 +305,47 @@ public sealed class ActionsDashboardWindow : Window
         return box;
     }
 
-    private Button Button(string key, Func<Task> action, bool prominent = false)
+    private Control BuildRepositoryFilter()
+    {
+        var panel = new StackPanel { Spacing = 5 };
+        panel.Children.Add(Secondary(T(LocalizationKeys.ActionsRepositoryFilter), PrimaryTextBrush));
+        var row = new WrapPanel();
+        row.Children.Add(FilterButton(T(LocalizationKeys.ActionsAllRepositories), _viewModel.SelectedRepository == null, () =>
+        {
+            _viewModel.SelectedRepository = null;
+            return Task.CompletedTask;
+        }));
+
+        foreach (var repository in _viewModel.Repositories.Take(12))
+        {
+            row.Children.Add(FilterButton(repository.FullName, _viewModel.SelectedRepository?.FullName == repository.FullName, () =>
+            {
+                _viewModel.SelectedRepository = repository;
+                return Task.CompletedTask;
+            }));
+        }
+
+        panel.Children.Add(row);
+        return panel;
+    }
+
+    private Button FilterButton(string text, bool selected, Func<Task> action)
+    {
+        var button = ButtonText(text, action);
+        button.Background = selected ? AccentBrush : FieldBrush;
+        return button;
+    }
+
+    private Button ButtonKey(string key, Func<Task> action, bool prominent = false)
+    {
+        return ButtonText(T(key), action, prominent);
+    }
+
+    private Button ButtonText(string text, Func<Task> action, bool prominent = false)
     {
         var button = new Button
         {
-            Content = T(key),
+            Content = text,
             Background = prominent ? AccentBrush : FieldBrush,
             Foreground = PrimaryTextBrush,
             BorderBrush = Brushes.Transparent,
@@ -379,6 +430,80 @@ public sealed class ActionsDashboardWindow : Window
             "" or "unknown" => T(LocalizationKeys.ActionsStatusUnknown),
             _ => conclusion
         };
+    }
+
+    private static string CorrelationText(GitHubCorrelationConfidence confidence)
+    {
+        return confidence switch
+        {
+            GitHubCorrelationConfidence.Exact => "Exact",
+            GitHubCorrelationConfidence.Probable => "Probable",
+            GitHubCorrelationConfidence.Possible => "Possible",
+            _ => "Unknown"
+        };
+    }
+
+    private string PermissionAvailabilityText()
+    {
+        var status = _viewModel.PermissionStatus;
+        var parts = new[]
+        {
+            $"Actions: {(status.HasWorkflowAccess ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))}",
+            $"Repo runners: {(status.HasRepositoryRunnerAccess ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))}",
+            $"Org runners: {(status.HasOrganizationRunnerAccess ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))}",
+            $"Rate limit: {(status.IsRateLimited ? T(LocalizationKeys.BooleanYes) : T(LocalizationKeys.BooleanNo))}"
+        };
+        return string.Join(" · ", parts);
+    }
+
+    private IBrush PermissionColor()
+    {
+        var status = _viewModel.PermissionStatus;
+        return status.HasWorkflowAccess && !status.IsRateLimited ? GreenBrush : OrangeBrush;
+    }
+
+    private static string StepSummary(GitHubWorkflowJobInfo job)
+    {
+        return string.Join(", ", job.Steps.Take(6).Select(step => $"{step.Name} {step.Status}/{step.Conclusion}".Trim()));
+    }
+
+    private async Task CopyMarkdownAsync()
+    {
+        if (Clipboard != null)
+            await Clipboard.SetTextAsync(_viewModel.BuildMarkdownDiagnosticPrompt());
+        _viewModel.StatusMessage = T(LocalizationKeys.ActionsCopied);
+    }
+
+    private async Task CopyJsonAsync()
+    {
+        if (Clipboard != null)
+            await Clipboard.SetTextAsync(_viewModel.BuildJsonDiagnosticContext());
+        _viewModel.StatusMessage = T(LocalizationKeys.ActionsCopied);
+    }
+
+    private Task ExportMarkdownAsync()
+    {
+        return ExportTextAsync("gitrunnermanager-actions-diagnostic.md", _viewModel.BuildMarkdownDiagnosticPrompt());
+    }
+
+    private Task ExportJsonAsync()
+    {
+        return ExportTextAsync("gitrunnermanager-actions-diagnostic.json", _viewModel.BuildJsonDiagnosticContext());
+    }
+
+    private async Task ExportTextAsync(string suggestedName, string content)
+    {
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            SuggestedFileName = suggestedName
+        });
+        if (file == null)
+            return;
+
+        await using var stream = await file.OpenWriteAsync();
+        await using var writer = new StreamWriter(stream);
+        await writer.WriteAsync(content);
+        _viewModel.StatusMessage = T(LocalizationKeys.ActionsExported);
     }
 
     private static IBrush RunnerColor(GitHubRunnerInfo runner)

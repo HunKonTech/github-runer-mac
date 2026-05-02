@@ -66,7 +66,7 @@ public class PreferencesStore : IPreferencesStore
 
     public string GitHubOAuthClientId
     {
-        get => GetString("", "GitHubOAuthClientId");
+        get => GetString(PreferenceDefaults.GitHubOAuthClientId, "GitHubOAuthClientId");
         set
         {
             _settings["GitHubOAuthClientId"] = value;

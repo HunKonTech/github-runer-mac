@@ -18,9 +18,12 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     [ObservableProperty] private GitHubAccountInfo account = new();
     [ObservableProperty] private IReadOnlyList<GitHubAccountConnection> accounts = [];
+    [ObservableProperty] private IReadOnlyList<GitHubRepositoryInfo> repositories = [];
     [ObservableProperty] private IReadOnlyList<GitHubRunnerInfo> runners = [];
+    [ObservableProperty] private IReadOnlyList<GitHubWorkflowRunInfo> allWorkflowRuns = [];
     [ObservableProperty] private IReadOnlyList<GitHubWorkflowRunInfo> workflowRuns = [];
     [ObservableProperty] private IReadOnlyList<GitHubWorkflowJobInfo> selectedJobs = [];
+    [ObservableProperty] private GitHubRepositoryInfo? selectedRepository;
     [ObservableProperty] private GitHubWorkflowRunInfo? selectedRun;
     [ObservableProperty] private GitHubApiPermissionStatus permissionStatus = new();
     [ObservableProperty] private DateTimeOffset? lastRefreshTime;
@@ -30,7 +33,6 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     [ObservableProperty] private string deviceCode = "";
     [ObservableProperty] private string verificationUri = "";
     [ObservableProperty] private string oauthClientId = "";
-    [ObservableProperty] private string organizationLogin = "";
 
     public ActionsDashboardViewModel(
         RunnerTrayStore store,
@@ -55,6 +57,11 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
     partial void OnSelectedRunChanged(GitHubWorkflowRunInfo? value)
     {
         _ = LoadJobsAsync(value);
+    }
+
+    partial void OnSelectedRepositoryChanged(GitHubRepositoryInfo? value)
+    {
+        ApplyRepositoryFilter();
     }
 
     public void StartPolling()
@@ -85,6 +92,8 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
             if (!Account.IsSignedIn || Accounts.Count == 0)
             {
                 WorkflowRuns = [];
+                AllWorkflowRuns = [];
+                Repositories = [];
                 Runners = [];
                 SelectedJobs = [];
                 StatusMessage = Account.Error ?? T(LocalizationKeys.ActionsSignInRequired);
@@ -94,8 +103,10 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
             var snapshot = await _actionsService.GetDashboardAsync(_store.Runners.Select(runner => runner.Profile).ToList(), cancellationToken);
             Account = snapshot.Account;
+            Repositories = snapshot.Repositories;
             Runners = MergeLocalRunnerState(snapshot.Runners);
-            WorkflowRuns = snapshot.WorkflowRuns;
+            AllWorkflowRuns = snapshot.WorkflowRuns;
+            ApplyRepositoryFilter();
             PermissionStatus = snapshot.PermissionStatus;
             LastRefreshTime = snapshot.RefreshedAt;
             StatusMessage = snapshot.PermissionStatus.HasRunnerAdminAccess ? "" : T(LocalizationKeys.ActionsRunnerAdminPermissionRequired);
@@ -127,7 +138,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     public Task SignInOrganizationAsync(Action<string> openUrl, CancellationToken cancellationToken = default)
     {
-        return SignInAsync(GitHubAccountConnectionKind.Organization, OrganizationLogin, openUrl, cancellationToken);
+        return SignInAsync(GitHubAccountConnectionKind.Organization, "", openUrl, cancellationToken);
     }
 
     private async Task SignInAsync(GitHubAccountConnectionKind kind, string organization, Action<string> openUrl, CancellationToken cancellationToken)
@@ -135,7 +146,19 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         var clientId = OauthClientId.Trim();
         if (string.IsNullOrWhiteSpace(clientId))
         {
-            StatusMessage = T(LocalizationKeys.ActionsOAuthClientIdRequired);
+            try
+            {
+                StatusMessage = T(LocalizationKeys.GitHubStatusSigningIn);
+                await _authService.ImportExistingTokenAsync(kind, organization, cancellationToken);
+                StatusMessage = T(LocalizationKeys.ActionsSignedIn);
+                await RefreshAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                StatusMessage = ex.Message.Contains("No GitHub token", StringComparison.OrdinalIgnoreCase)
+                    ? T(LocalizationKeys.ActionsGitHubCliTokenRequired)
+                    : T(LocalizationKeys.GitHubStatusError, ex.Message);
+            }
             return;
         }
 
@@ -164,6 +187,8 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         Account = new GitHubAccountInfo();
         Accounts = [];
         WorkflowRuns = [];
+        AllWorkflowRuns = [];
+        Repositories = [];
         Runners = [];
         SelectedJobs = [];
         StatusMessage = T(LocalizationKeys.ActionsSignedOut);
@@ -189,18 +214,90 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
         var jobs = await _actionsService.GetJobsAsync(run);
         var profiles = _store.Runners.Select(runner => runner.Profile).ToList();
-        SelectedJobs = jobs.Select(job => new GitHubWorkflowJobInfo
+        var activity = CurrentLocalRunner?.RunnerSnapshot.Activity ?? _store.RunnerSnapshot.Activity;
+        var usage = CurrentLocalRunner?.ResourceUsage ?? _store.ResourceUsage;
+        SelectedJobs = jobs.Select(job =>
         {
-            Id = job.Id,
-            Name = job.Name,
-            Status = job.Status,
-            Conclusion = job.Conclusion,
-            RunnerName = job.RunnerName,
-            StartedAt = job.StartedAt,
-            CompletedAt = job.CompletedAt,
-            HtmlUrl = job.HtmlUrl,
-            IsRunningOnThisRunner = GitHubJobMatcher.IsRunningOnLocalRunner(job, profiles)
+            var correlation = GitHubJobMatcher.Match(job, profiles, activity, usage);
+            return new GitHubWorkflowJobInfo
+            {
+                Id = job.Id,
+                Name = job.Name,
+                Status = job.Status,
+                Conclusion = job.Conclusion,
+                RunnerName = job.RunnerName,
+                RunnerGroupName = job.RunnerGroupName,
+                Labels = job.Labels,
+                StartedAt = job.StartedAt,
+                CompletedAt = job.CompletedAt,
+                HtmlUrl = job.HtmlUrl,
+                Steps = job.Steps,
+                IsRunningOnThisRunner = correlation.Confidence != GitHubCorrelationConfidence.Unknown,
+                CorrelationConfidence = correlation.Confidence,
+                CorrelationReason = correlation.Reason
+            };
         }).ToList();
+    }
+
+    public GitHubActionsDiagnosticContext BuildDiagnosticContext()
+    {
+        var localRunner = CurrentLocalRunner;
+        var currentJob = SelectedJobs
+            .Where(job => job.CorrelationConfidence != GitHubCorrelationConfidence.Unknown)
+            .OrderBy(job => job.CorrelationConfidence)
+            .FirstOrDefault()
+            ?? SelectedJobs.FirstOrDefault(job => job.Status is "in_progress" or "queued" or "waiting")
+            ?? SelectedJobs.FirstOrDefault(job => job.Conclusion is "failure" or "timed_out")
+            ?? SelectedJobs.FirstOrDefault();
+        var confidence = currentJob?.CorrelationConfidence ?? SelectedRun?.CorrelationConfidence ?? GitHubCorrelationConfidence.Unknown;
+
+        return new GitHubActionsDiagnosticContext
+        {
+            Account = Account,
+            Run = SelectedRun,
+            Jobs = SelectedJobs,
+            CurrentJob = currentJob,
+            LocalRunner = localRunner?.Profile,
+            LocalRunnerStatus = localRunner?.RunnerSnapshot ?? _store.RunnerSnapshot,
+            ResourceUsage = localRunner?.ResourceUsage ?? _store.ResourceUsage,
+            LastRelevantRunnerLogLines = localRunner == null ? [] : GitHubActionsDiagnosticExporter.ReadRelevantRunnerLogLines(localRunner.Profile.RunnerDirectory),
+            CorrelationConfidence = confidence,
+            CorrelationReason = currentJob?.CorrelationReason ?? SelectedRun?.CorrelationReason ?? "",
+            PermissionStatus = PermissionStatus,
+            ExportedAt = DateTimeOffset.Now
+        };
+    }
+
+    public string BuildMarkdownDiagnosticPrompt()
+    {
+        return GitHubActionsDiagnosticExporter.ToMarkdownPrompt(BuildDiagnosticContext());
+    }
+
+    public string BuildJsonDiagnosticContext()
+    {
+        return GitHubActionsDiagnosticExporter.ToJson(BuildDiagnosticContext());
+    }
+
+    private RunnerInstanceStore? CurrentLocalRunner => _store.Runners.FirstOrDefault(runner =>
+            runner.Snapshot.StatusKind == RunnerStatusKind.Busy ||
+            runner.ResourceUsage.IsJobActive ||
+            runner.RunnerSnapshot.Activity.Kind == RunnerActivityKind.Busy)
+        ?? _store.Runners.FirstOrDefault();
+
+    private void ApplyRepositoryFilter()
+    {
+        if (SelectedRepository == null || string.IsNullOrWhiteSpace(SelectedRepository.FullName))
+        {
+            WorkflowRuns = AllWorkflowRuns;
+            return;
+        }
+
+        WorkflowRuns = AllWorkflowRuns
+            .Where(run => string.Equals(run.RepositoryFullName, SelectedRepository.FullName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (SelectedRun != null && WorkflowRuns.All(run => run.Id != SelectedRun.Id))
+            SelectedRun = null;
     }
 
     private async Task PollAsync(CancellationToken cancellationToken)

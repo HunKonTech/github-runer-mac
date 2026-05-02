@@ -99,6 +99,29 @@ public class GitHubService : IGitHubService, IGitHubAuthService
         throw new OperationCanceledException(cancellationToken);
     }
 
+    public async Task<GitHubAccountConnection> ImportExistingTokenAsync(GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default)
+    {
+        var token = await GetExistingTokenAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("No GitHub token was found. Sign in with GitHub CLI using 'gh auth login', or add an OAuth Client ID in Settings.");
+
+        var account = await GetAccountInfoAsync(token, cancellationToken);
+        if (!account.IsSignedIn)
+            throw new InvalidOperationException(account.Error ?? "The existing GitHub token could not be validated.");
+
+        var connection = new GitHubStoredAccount
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Login = account.Login ?? "GitHub",
+            Token = token,
+            Kind = kind,
+            Organization = organization.Trim()
+        };
+        await _credentialStore.SaveGitHubTokenAsync(token);
+        await ((IGitHubTokenStore)_credentialStore).SaveAccountAsync(connection);
+        return connection;
+    }
+
     public async Task<GitHubAccountSnapshot> GetAccountAsync(CancellationToken cancellationToken = default)
     {
         return (await GetAccountInfoAsync(cancellationToken)).ToSnapshot();
@@ -142,6 +165,47 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             AvatarUrl = user?.AvatarUrl,
             HtmlUrl = user?.HtmlUrl
         };
+    }
+
+    private static async Task<string?> GetExistingTokenAsync(CancellationToken cancellationToken)
+    {
+        var environmentToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN")
+            ?? Environment.GetEnvironmentVariable("GH_TOKEN");
+        if (!string.IsNullOrWhiteSpace(environmentToken))
+            return environmentToken.Trim();
+
+        return await GetGitHubCliTokenAsync(cancellationToken);
+    }
+
+    private static async Task<string?> GetGitHubCliTokenAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = "auth token",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+
+            if (process == null)
+                return null;
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            if (process.ExitCode != 0)
+                return null;
+
+            var token = (await outputTask).Trim();
+            return string.IsNullOrWhiteSpace(token) ? null : token;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public Task SignOutAsync()

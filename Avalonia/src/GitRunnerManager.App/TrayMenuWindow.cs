@@ -175,7 +175,14 @@ public sealed class TrayMenuWindow : Window
         });
 
         foreach (var runner in _store.Runners.Take(5))
+        {
             panel.Children.Add(BuildRunnerRow(runner));
+            var jobName = runner.RunnerSnapshot.Activity.CurrentJobName;
+            if (!string.IsNullOrWhiteSpace(jobName) || runner.ResourceUsage.IsJobActive)
+                panel.Children.Add(SmallStatusRow(
+                    LocalizationKeys.ActionsLocalRunnerActivity,
+                    $"{(string.IsNullOrWhiteSpace(jobName) ? runner.RunnerSnapshot.Activity.Description : jobName)} · {T(LocalizationKeys.ActionsCorrelationConfidence)}: {GitHubCorrelationConfidence.Possible}"));
+        }
 
         if (_store.Runners.Count == 0)
             panel.Children.Add(StatusRow(LocalizationKeys.StatusRunnerTitle, T(LocalizationKeys.RunnerStatusNoRunners), GrayBrush));

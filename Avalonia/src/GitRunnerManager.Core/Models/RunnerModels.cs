@@ -44,6 +44,23 @@ public class RunnerConfig
     }
 }
 
+public class RunnerFolderValidationResult
+{
+    public bool IsValid { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public IReadOnlyList<string> Markers { get; init; } = [];
+}
+
+public class RunnerLogSnapshot
+{
+    public string? FilePath { get; init; }
+    public string Content { get; init; } = string.Empty;
+    public bool Exists => !string.IsNullOrWhiteSpace(FilePath);
+    public bool IsTruncated { get; init; }
+    public long FileSizeBytes { get; init; }
+    public DateTimeOffset? LastWriteTime { get; init; }
+}
+
 public enum GitHubRunnerScope
 {
     Repository,
@@ -116,6 +133,16 @@ public class GitHubRepositoryInfo
     public string Name { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
     public string HtmlUrl { get; init; } = string.Empty;
+    public bool ActionsEnabled { get; init; } = true;
+}
+
+public class GitHubRepositoryReference
+{
+    public string Owner { get; init; } = string.Empty;
+    public string Repo { get; init; } = string.Empty;
+    public string FullName => string.IsNullOrWhiteSpace(Owner) || string.IsNullOrWhiteSpace(Repo)
+        ? string.Empty
+        : $"{Owner}/{Repo}";
 }
 
 public class GitHubRunnerGroupInfo
@@ -147,14 +174,18 @@ public class GitHubWorkflowRunInfo
     public long Id { get; init; }
     public string RepositoryFullName { get; init; } = string.Empty;
     public string WorkflowName { get; init; } = string.Empty;
+    public long RunNumber { get; init; }
     public string Branch { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
     public string Conclusion { get; init; } = string.Empty;
+    public DateTimeOffset? CreatedAt { get; init; }
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
     public string Actor { get; init; } = string.Empty;
     public string HtmlUrl { get; init; } = string.Empty;
     public bool IsRunningOnThisRunner { get; init; }
+    public GitHubCorrelationConfidence CorrelationConfidence { get; init; } = GitHubCorrelationConfidence.Unknown;
+    public string CorrelationReason { get; init; } = string.Empty;
     public string JobsUrl { get; init; } = string.Empty;
 
     public TimeSpan? Duration => StartedAt.HasValue && UpdatedAt.HasValue ? UpdatedAt.Value - StartedAt.Value : null;
@@ -168,27 +199,70 @@ public class GitHubWorkflowJobInfo
     public string Status { get; init; } = string.Empty;
     public string Conclusion { get; init; } = string.Empty;
     public string RunnerName { get; init; } = string.Empty;
+    public string RunnerGroupName { get; init; } = string.Empty;
+    public IReadOnlyList<string> Labels { get; init; } = [];
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? CompletedAt { get; init; }
     public string HtmlUrl { get; init; } = string.Empty;
+    public IReadOnlyList<GitHubWorkflowStepInfo> Steps { get; init; } = [];
     public bool IsRunningOnThisRunner { get; init; }
+    public GitHubCorrelationConfidence CorrelationConfidence { get; init; } = GitHubCorrelationConfidence.Unknown;
+    public string CorrelationReason { get; init; } = string.Empty;
+}
+
+public class GitHubWorkflowStepInfo
+{
+    public string Name { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public string Conclusion { get; init; } = string.Empty;
+    public int Number { get; init; }
+    public DateTimeOffset? StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+}
+
+public enum GitHubCorrelationConfidence
+{
+    Exact,
+    Probable,
+    Possible,
+    Unknown
 }
 
 public class GitHubApiPermissionStatus
 {
     public bool HasWorkflowAccess { get; init; } = true;
     public bool HasRunnerAdminAccess { get; init; } = true;
+    public bool HasRepositoryRunnerAccess { get; init; } = true;
+    public bool HasOrganizationRunnerAccess { get; init; } = true;
     public bool IsRateLimited { get; init; }
     public string Message { get; init; } = string.Empty;
+    public string TechnicalDetails { get; init; } = string.Empty;
 }
 
 public class GitHubDashboardSnapshot
 {
     public GitHubAccountInfo Account { get; init; } = new();
+    public IReadOnlyList<GitHubRepositoryInfo> Repositories { get; init; } = [];
     public IReadOnlyList<GitHubRunnerInfo> Runners { get; init; } = [];
     public IReadOnlyList<GitHubWorkflowRunInfo> WorkflowRuns { get; init; } = [];
     public GitHubApiPermissionStatus PermissionStatus { get; init; } = new();
     public DateTimeOffset RefreshedAt { get; init; } = DateTimeOffset.Now;
+}
+
+public class GitHubActionsDiagnosticContext
+{
+    public GitHubAccountInfo Account { get; init; } = new();
+    public GitHubWorkflowRunInfo? Run { get; init; }
+    public IReadOnlyList<GitHubWorkflowJobInfo> Jobs { get; init; } = [];
+    public GitHubWorkflowJobInfo? CurrentJob { get; init; }
+    public RunnerConfig? LocalRunner { get; init; }
+    public RunnerSnapshot LocalRunnerStatus { get; init; } = RunnerSnapshot.Stopped;
+    public RunnerResourceUsage ResourceUsage { get; init; } = RunnerResourceUsage.Zero;
+    public IReadOnlyList<string> LastRelevantRunnerLogLines { get; init; } = [];
+    public GitHubCorrelationConfidence CorrelationConfidence { get; init; } = GitHubCorrelationConfidence.Unknown;
+    public string CorrelationReason { get; init; } = string.Empty;
+    public GitHubApiPermissionStatus PermissionStatus { get; init; } = new();
+    public DateTimeOffset ExportedAt { get; init; } = DateTimeOffset.Now;
 }
 
 public class GitHubDeviceFlowStart
@@ -467,6 +541,7 @@ public enum LaunchAtLoginStatus
 public static class PreferenceDefaults
 {
     public const string MacOsRunnerDirectory = "/Users/koncsikbenedek/GitHub/actions-runner";
+    public const string GitHubOAuthClientId = "Ov23liuWbzhLR0LpcXwv";
     public const UpdateChannel UpdateChannel = Models.UpdateChannel.Stable;
     public const AppLanguage Language = AppLanguage.System;
     public const bool StopRunnerOnBattery = false;

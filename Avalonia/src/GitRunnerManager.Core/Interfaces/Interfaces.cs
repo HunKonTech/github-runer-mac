@@ -20,6 +20,18 @@ public interface IRunnerLogParser
     RunnerActivitySnapshot GetLatestActivity(DirectoryInfo runnerDirectory);
 }
 
+public interface IRunnerFolderValidator
+{
+    RunnerFolderValidationResult Validate(string runnerDirectory);
+}
+
+public interface IRunnerLogService
+{
+    RunnerLogSnapshot ReadLog(RunnerConfig profile, bool preferActiveLog, int maxBytes = 96 * 1024);
+    string? GetLogDirectory(RunnerConfig profile);
+    void OpenLogDirectory(RunnerConfig profile);
+}
+
 public interface IResourceMonitor
 {
     RunnerResourceUsage GetCurrentUsage();
@@ -96,6 +108,7 @@ public interface IGitHubAuthService
     Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
     Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
     Task<GitHubAccountConnection> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default);
+    Task<GitHubAccountConnection> ImportExistingTokenAsync(GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default);
     Task<GitHubAccountInfo> GetAccountAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GitHubAccountConnection>> GetAccountsAsync(CancellationToken cancellationToken = default);
     Task SignOutAsync(string accountId);
@@ -112,6 +125,7 @@ public interface IGitHubService
 {
     Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
     Task<string> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, CancellationToken cancellationToken = default);
+    Task<GitHubAccountConnection> CompleteDeviceFlowAsync(string clientId, string deviceCode, int intervalSeconds, GitHubAccountConnectionKind kind, string organization, CancellationToken cancellationToken = default);
     Task<GitHubAccountSnapshot> GetAccountAsync(CancellationToken cancellationToken = default);
     Task SignOutAsync();
     Task<GitHubRegistrationToken> CreateRegistrationTokenAsync(GitHubRunnerSetupRequest request, CancellationToken cancellationToken = default);

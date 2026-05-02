@@ -32,6 +32,8 @@ public partial class App : Application
     private IGitHubActionsService? _gitHubActionsService;
     private IGitHubTokenStore? _gitHubTokenStore;
     private ILaunchAtLoginService? _launchAtLoginService;
+    private IRunnerFolderValidator? _runnerFolderValidator;
+    private IRunnerLogService? _runnerLogService;
     private TrayIcon? _trayIcon;
     private TrayMenuWindow? _trayMenuWindow;
     private InitializingTrayWindow? _initializingTrayWindow;
@@ -72,6 +74,8 @@ public partial class App : Application
             _gitHubAuthService = (IGitHubAuthService)_gitHubService;
             _gitHubActionsService = new GitHubActionsApiClient(_gitHubTokenStore, _gitHubAuthService);
             _launchAtLoginService = new LaunchAtLoginServiceFactory().Create();
+            _runnerFolderValidator = new RunnerFolderValidator();
+            _runnerLogService = new RunnerLogService();
 
             CreateTrayIcon();
             ObserveBackgroundTask(InitializeRunnerStoreAsync(), "Runner store initialization failed");
@@ -258,7 +262,7 @@ public partial class App : Application
         if (_settingsWindow == null)
         {
             _settingsWindow = new SettingsWindow();
-            _settingsWindow.Initialize(_store!, _localization!, _preferences!, _updateService!, _runnerUpdateService!, _gitHubService!, _launchAtLoginService!);
+            _settingsWindow.Initialize(_store!, _localization!, _preferences!, _updateService!, _runnerUpdateService!, _gitHubService!, _launchAtLoginService!, _runnerFolderValidator!, _runnerLogService!);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         _settingsWindow.Show();
@@ -270,12 +274,18 @@ public partial class App : Application
         if (_actionsDashboardWindow == null)
         {
             var viewModel = new ActionsDashboardViewModel(_store!, _preferences!, _gitHubAuthService!, _gitHubActionsService!, _localization!);
-            _actionsDashboardWindow = new ActionsDashboardWindow(viewModel, _localization!);
+            _actionsDashboardWindow = new ActionsDashboardWindow(viewModel, _localization!, ShowGitHubAccountsSettingsWindow);
             _actionsDashboardWindow.Closed += (_, _) => _actionsDashboardWindow = null;
         }
 
         _actionsDashboardWindow.Show();
         _actionsDashboardWindow.Activate();
+    }
+
+    private void ShowGitHubAccountsSettingsWindow()
+    {
+        ShowSettingsWindow();
+        _settingsWindow?.ShowGitHubAccountsPage();
     }
 
     private void ShowAboutWindow()

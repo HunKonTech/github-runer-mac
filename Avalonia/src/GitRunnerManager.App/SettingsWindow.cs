@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -48,6 +49,8 @@ public sealed class SettingsWindow : Window
     private IRunnerUpdateService? _runnerUpdateService;
     private IGitHubService? _gitHubService;
     private ILaunchAtLoginService? _launchAtLoginService;
+    private IRunnerFolderValidator? _runnerFolderValidator;
+    private IRunnerLogService? _runnerLogService;
     private ContentControl? _detail;
     private Border? _sidebar;
     private AppUpdateInfo? _availableUpdate;
@@ -68,6 +71,10 @@ public sealed class SettingsWindow : Window
     private string _gitHubLabels = "self-hosted";
     private readonly Button[] _sidebarButtons = new Button[8];
     private bool _isPageRefreshQueued;
+    private readonly DispatcherTimer _runnerLogTimer;
+    private string _runnerLogText = "";
+    private string _runnerLogStatus = "";
+    private string? _runnerLogPath;
 
     public SettingsWindow()
     {
@@ -76,6 +83,11 @@ public sealed class SettingsWindow : Window
         MinWidth = 820;
         MinHeight = 560;
         Background = WindowBrush;
+        _runnerLogTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1.5)
+        };
+        _runnerLogTimer.Tick += async (_, _) => await RefreshSelectedRunnerLogAsync(true);
     }
 
     public void Initialize(
@@ -85,7 +97,9 @@ public sealed class SettingsWindow : Window
         IAppUpdateService updateService,
         IRunnerUpdateService runnerUpdateService,
         IGitHubService gitHubService,
-        ILaunchAtLoginService launchAtLoginService)
+        ILaunchAtLoginService launchAtLoginService,
+        IRunnerFolderValidator runnerFolderValidator,
+        IRunnerLogService runnerLogService)
     {
         _store = store;
         _localization = localization;
@@ -94,9 +108,12 @@ public sealed class SettingsWindow : Window
         _runnerUpdateService = runnerUpdateService;
         _gitHubService = gitHubService;
         _launchAtLoginService = launchAtLoginService;
+        _runnerFolderValidator = runnerFolderValidator;
+        _runnerLogService = runnerLogService;
         _updateStatus = T(LocalizationKeys.UpdateIdle);
         _runnerUpdateStatus = T(LocalizationKeys.RunnerUpdateIdle);
         _gitHubStatus = T(LocalizationKeys.GitHubStatusReady);
+        _runnerLogStatus = T(LocalizationKeys.RunnerLogNoLogs);
         Title = T(LocalizationKeys.SettingsWindowTitle);
 
         _localization.CurrentLanguage = _preferences.Language;
@@ -107,6 +124,13 @@ public sealed class SettingsWindow : Window
         _ = RefreshGitHubAccountAsync();
     }
 
+    public void ShowGitHubAccountsPage()
+    {
+        SelectSection(2);
+        Show();
+        Activate();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         if (_localization != null)
@@ -115,6 +139,7 @@ public sealed class SettingsWindow : Window
         if (_store != null)
             _store.PropertyChanged -= OnStorePropertyChanged;
 
+        _runnerLogTimer.Stop();
         base.OnClosed(e);
     }
 
@@ -325,9 +350,8 @@ public sealed class SettingsWindow : Window
     private Control BuildRunnersPage()
     {
         var panel = Page(LocalizationKeys.SettingsRunnersTitle);
-        var headerButtons = ButtonRow();
-        headerButtons.Children.Add(Button(LocalizationKeys.ButtonAddRunner, AddRunner));
-        headerButtons.Children.Add(Button(LocalizationKeys.ButtonImportRunnerFolder, async () => await ImportRunnerFolderAsync()));
+        var headerButtons = ButtonWrap();
+        headerButtons.Children.Add(Button(LocalizationKeys.ButtonAddRunner, async () => await ShowAddRunnerDialogAsync()));
         headerButtons.Children.Add(Button(LocalizationKeys.ButtonUpdateAllRunners, async () => await UpdateAllRunnersAsync()));
         panel.Children.Add(headerButtons);
         panel.Children.Add(SecondaryText(_runnerUpdateStatus));
@@ -371,21 +395,6 @@ public sealed class SettingsWindow : Window
         return Scroll(panel);
     }
 
-    private void AddRunner()
-    {
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "actions-runner");
-        var profile = new RunnerConfig
-        {
-            DisplayName = $"Runner {(_store?.Runners.Count ?? 0) + 1}",
-            RunnerDirectory = directory,
-            StopOnBattery = _preferences?.StopRunnerOnBattery ?? PreferenceDefaults.StopRunnerOnBattery,
-            StopOnMeteredNetwork = _preferences?.StopRunnerOnMeteredNetwork ?? PreferenceDefaults.StopRunnerOnMeteredNetwork
-        };
-        _store?.AddRunnerProfile(profile);
-        _selectedRunnerId = profile.Id;
-        BuildSelectedPage();
-    }
-
     private async Task ImportRunnerFolderAsync()
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
@@ -398,6 +407,15 @@ public sealed class SettingsWindow : Window
         if (string.IsNullOrWhiteSpace(path))
             return;
 
+        await ImportRunnerFolderAsync(path);
+    }
+
+    private Task ImportRunnerFolderAsync(string path)
+    {
+        var validation = _runnerFolderValidator?.Validate(path);
+        if (validation?.IsValid == false)
+            throw new InvalidOperationException(T(LocalizationKeys.RunnerFolderInvalid));
+
         var profile = new RunnerConfig
         {
             DisplayName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
@@ -408,6 +426,109 @@ public sealed class SettingsWindow : Window
         _store?.AddRunnerProfile(profile);
         _selectedRunnerId = profile.Id;
         BuildSelectedPage();
+        return Task.CompletedTask;
+    }
+
+    private async Task ShowAddRunnerDialogAsync()
+    {
+        if (_store == null)
+            return;
+
+        await RefreshGitHubAccountAsync();
+        var importPath = "";
+        var status = T(LocalizationKeys.GitHubStatusReady);
+        var dialog = new Window
+        {
+            Title = T(LocalizationKeys.ButtonAddRunner),
+            Width = 680,
+            Height = 720,
+            MinWidth = 560,
+            MinHeight = 560,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = WindowBrush
+        };
+
+        var root = new StackPanel
+        {
+            Margin = new Thickness(22),
+            Spacing = 16
+        };
+
+        TextBlock StatusText() => new()
+        {
+            Text = status == T(LocalizationKeys.GitHubStatusReady) ? _gitHubStatus : status,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = SecondaryTextBrush
+        };
+
+        void RebuildDialog()
+        {
+            root.Children.Clear();
+            root.Children.Add(Label(LocalizationKeys.ButtonAddRunner));
+            root.Children.Add(SecondaryText(T(LocalizationKeys.RunnerAddDialogDescription)));
+            root.Children.Add(Separator());
+            root.Children.Add(Label(LocalizationKeys.ButtonImportRunnerFolder));
+            root.Children.Add(TextField(LocalizationKeys.RunnerDirectoryTitle, importPath, value => importPath = value.Trim()));
+            var importButtons = ButtonWrap();
+            importButtons.Children.Add(Button(LocalizationKeys.ButtonChooseRunnerDirectory, async () =>
+            {
+                var folders = await dialog.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    AllowMultiple = false,
+                    Title = T(LocalizationKeys.ButtonImportRunnerFolder)
+                });
+                var path = folders.FirstOrDefault()?.Path.LocalPath;
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    importPath = path;
+                    RebuildDialog();
+                }
+            }));
+            importButtons.Children.Add(Button(LocalizationKeys.RunnerImportSelectedFolder, async () =>
+            {
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(importPath))
+                    {
+                        status = T(LocalizationKeys.RunnerFolderRequired);
+                        RebuildDialog();
+                        return;
+                    }
+
+                    var validation = _runnerFolderValidator?.Validate(importPath);
+                    if (validation?.IsValid == false)
+                    {
+                        status = T(LocalizationKeys.RunnerFolderInvalid);
+                        RebuildDialog();
+                        return;
+                    }
+
+                    await ImportRunnerFolderAsync(importPath);
+                    dialog.Close(true);
+                }
+                catch (Exception ex)
+                {
+                    status = ex.Message;
+                    RebuildDialog();
+                }
+            }));
+            root.Children.Add(importButtons);
+
+            root.Children.Add(Separator());
+            root.Children.Add(Label(LocalizationKeys.RunnerConfigureWithGitHubAccount));
+            root.Children.Add(SecondaryText(_gitHubAccount.IsSignedIn
+                ? GitHubAccountText()
+                : T(LocalizationKeys.RunnerGitHubAccountRequired)));
+            AddGitHubRunnerFields(root, dialog, RebuildDialog);
+            root.Children.Add(StatusText());
+            root.Children.Add(Button(LocalizationKeys.ButtonCancel, () => dialog.Close(false)));
+        }
+
+        dialog.Content = Scroll(root);
+        RebuildDialog();
+        await dialog.ShowDialog<bool>(this);
     }
 
     private async Task RemoveSelectedRunner()
@@ -515,6 +636,9 @@ public sealed class SettingsWindow : Window
         button.Click += (_, _) =>
         {
             _selectedRunnerId = runner.Profile.Id;
+            _runnerLogText = "";
+            _runnerLogPath = null;
+            _ = RefreshSelectedRunnerLogAsync(true);
             BuildSelectedPage();
         };
         return button;
@@ -562,7 +686,7 @@ public sealed class SettingsWindow : Window
         detail.Children.Add(Toggle(LocalizationKeys.RunnerStopOnMeteredNetworkToggle, profile.StopOnMeteredNetwork, value => { profile.StopOnMeteredNetwork = value; SaveProfile(profile); }));
         detail.Children.Add(Toggle(LocalizationKeys.RunnerEnabledToggle, profile.IsEnabled, value => { profile.IsEnabled = value; SaveProfile(profile); }));
 
-        var buttons = ButtonRow();
+        var buttons = ButtonWrap();
         buttons.Children.Add(Button(LocalizationKeys.ButtonStart, async () => await (_store?.StartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
         buttons.Children.Add(Button(LocalizationKeys.ButtonStop, async () => await (_store?.StopRunnerAsync(profile.Id) ?? Task.CompletedTask)));
         buttons.Children.Add(Button(LocalizationKeys.ButtonRestart, async () => await (_store?.RestartRunnerAsync(profile.Id) ?? Task.CompletedTask)));
@@ -571,32 +695,125 @@ public sealed class SettingsWindow : Window
         buttons.Children.Add(Button(LocalizationKeys.ButtonViewLogs, () => _store?.OpenRunnerLogs(profile.Id)));
         buttons.Children.Add(Button(LocalizationKeys.ButtonUpdateRunner, async () => await UpdateRunnerAsync(profile), true));
         detail.Children.Add(buttons);
+        detail.Children.Add(BuildRunnerLogViewer(runner));
+        UpdateRunnerLogTimer(runner);
 
         return detail;
+    }
+
+    private Control BuildRunnerLogViewer(RunnerInstanceStore runner)
+    {
+        if (string.IsNullOrWhiteSpace(_runnerLogText) && _runnerLogPath == null)
+            _ = RefreshSelectedRunnerLogAsync(false);
+
+        var panel = new StackPanel
+        {
+            Spacing = 10,
+            Margin = new Thickness(0, 10, 0, 0)
+        };
+        panel.Children.Add(Label(LocalizationKeys.RunnerLogsTitle));
+        panel.Children.Add(SecondaryText(_runnerLogPath ?? _runnerLogStatus));
+
+        var logText = string.IsNullOrWhiteSpace(_runnerLogText)
+            ? T(LocalizationKeys.RunnerLogNoLogs)
+            : _runnerLogText;
+
+        panel.Children.Add(new TextBox
+        {
+            Text = logText,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            Background = FieldBrush,
+            Foreground = PrimaryTextBrush,
+            BorderBrush = SidebarBorderBrush,
+            FontFamily = FontFamily.Parse("Menlo,Consolas,monospace"),
+            FontSize = 12,
+            MinHeight = 220,
+            MaxHeight = 360,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        });
+
+        var buttons = ButtonWrap();
+        buttons.Children.Add(Button(LocalizationKeys.RunnerLogRefresh, async () => await RefreshSelectedRunnerLogAsync(true)));
+        buttons.Children.Add(Button(LocalizationKeys.RunnerLogOpenFolder, () => _runnerLogService?.OpenLogDirectory(runner.Profile)));
+        panel.Children.Add(buttons);
+        return panel;
+    }
+
+    private async Task RefreshSelectedRunnerLogAsync(bool rebuild)
+    {
+        if (_store == null || _runnerLogService == null || _selectedRunnerId == null)
+            return;
+
+        var runner = _store.GetRunner(_selectedRunnerId);
+        if (runner == null)
+            return;
+
+        var profile = runner.Profile.Clone();
+        var isRunning = runner.RunnerSnapshot.IsRunning;
+        var snapshot = await Task.Run(() => _runnerLogService.ReadLog(profile, isRunning));
+        _runnerLogPath = snapshot.FilePath;
+        _runnerLogText = snapshot.Content;
+        _runnerLogStatus = snapshot.Exists
+            ? snapshot.IsTruncated
+                ? T(LocalizationKeys.RunnerLogTruncated)
+                : T(LocalizationKeys.GitHubStatusReady)
+            : T(LocalizationKeys.RunnerLogNoLogs);
+
+        if (rebuild)
+            QueueSelectedPageRefresh();
+    }
+
+    private void UpdateRunnerLogTimer(RunnerInstanceStore runner)
+    {
+        if (runner.RunnerSnapshot.IsRunning)
+        {
+            if (!_runnerLogTimer.IsEnabled)
+                _runnerLogTimer.Start();
+            return;
+        }
+
+        _runnerLogTimer.Stop();
     }
 
     private Control BuildGitHubAccountsPage()
     {
         var panel = Page(LocalizationKeys.SettingsGitHubAccountsTitle);
-        panel.Children.Add(Label(LocalizationKeys.ActionsDashboardTitle));
-        panel.Children.Add(SecondaryText(T(LocalizationKeys.ActionsMovedFromSettings)));
-        panel.Children.Add(Label(LocalizationKeys.GitHubOAuthAppValuesTitle));
-        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthApplicationName, T(LocalizationKeys.GitHubOAuthApplicationNameValue)));
-        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthHomepageUrl, T(LocalizationKeys.GitHubOAuthHomepageUrlValue)));
-        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthCallbackUrl, T(LocalizationKeys.GitHubOAuthCallbackUrlValue)));
-        panel.Children.Add(Row(LocalizationKeys.GitHubOAuthDeviceFlow, T(LocalizationKeys.GitHubOAuthDeviceFlowValue)));
-        var setupButtons = ButtonRow();
-        setupButtons.Children.Add(LinkButton("GitHub Developer Settings", "https://github.com/settings/developers"));
-        setupButtons.Children.Add(LinkButton(LocalizationKeys.ButtonOpenReleasePage, "https://docs.github.com/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"));
-        panel.Children.Add(setupButtons);
+        panel.Children.Add(Label(LocalizationKeys.GitHubAccountSectionTitle));
+        panel.Children.Add(Row(LocalizationKeys.UpdateStatusTitle, GitHubAccountText()));
+        if (!string.IsNullOrWhiteSpace(_gitHubStatus))
+            panel.Children.Add(SecondaryText(_gitHubStatus));
 
-        panel.Children.Add(TextField(LocalizationKeys.GitHubOAuthClientIdTitle, _preferences?.GitHubOAuthClientId ?? "", value =>
+        var loginButtons = ButtonWrap();
+        loginButtons.Children.Add(Button(LocalizationKeys.ActionsSignInPersonal, async () => await SignInGitHubAsync(GitHubAccountConnectionKind.Personal), true));
+        loginButtons.Children.Add(Button(LocalizationKeys.ActionsSignInOrganization, async () => await SignInGitHubAsync(GitHubAccountConnectionKind.Organization)));
+        panel.Children.Add(loginButtons);
+
+        if (_gitHubAccount.IsSignedIn)
         {
-            if (_preferences != null)
-                _preferences.GitHubOAuthClientId = value.Trim();
-        }));
+            var accountButtons = ButtonWrap();
+            accountButtons.Margin = new Thickness(0, 0, 0, 4);
+            accountButtons.Children.Add(DestructiveButton(LocalizationKeys.GitHubSignOutButton, async () => await SignOutGitHubAsync()));
+            panel.Children.Add(accountButtons);
+        }
 
-        panel.Children.Add(Label(LocalizationKeys.GitHubRunnerSetupTitle));
+        if (!string.IsNullOrWhiteSpace(_gitHubDeviceCode))
+        {
+            panel.Children.Add(Row(LocalizationKeys.GitHubDeviceCode, _gitHubDeviceCode));
+            var deviceButtons = ButtonWrap();
+            deviceButtons.Children.Add(Button(LocalizationKeys.GitHubCopyDeviceCodeButton, async () => await CopyDeviceCodeAsync()));
+            if (!string.IsNullOrWhiteSpace(_gitHubVerificationUri))
+                deviceButtons.Children.Add(LinkButton(LocalizationKeys.GitHubOpenDevicePageButton, _gitHubVerificationUri));
+            panel.Children.Add(deviceButtons);
+        }
+
+        panel.Children.Add(SecondaryText(T(LocalizationKeys.GitHubAccountsRunnerManagementHint)));
+        return Scroll(panel);
+    }
+
+    private void AddGitHubRunnerFields(StackPanel panel, Window owner, Action rebuild)
+    {
         panel.Children.Add(Label(LocalizationKeys.GitHubRunnerScopeTitle));
         var scope = new ComboBox
         {
@@ -612,7 +829,7 @@ public sealed class SettingsWindow : Window
         scope.SelectionChanged += (_, _) =>
         {
             _gitHubRunnerScope = scope.SelectedIndex == 1 ? GitHubRunnerScope.Organization : GitHubRunnerScope.Repository;
-            BuildSelectedPage();
+            rebuild();
         };
         panel.Children.Add(scope);
 
@@ -623,10 +840,10 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(TextField(LocalizationKeys.GitHubRunnerDirectoryField, _gitHubRunnerDirectory, value => _gitHubRunnerDirectory = value.Trim()));
         panel.Children.Add(TextField(LocalizationKeys.RunnerLabelsTitle, _gitHubLabels, value => _gitHubLabels = value));
 
-        var runnerButtons = ButtonRow();
+        var runnerButtons = ButtonWrap();
         runnerButtons.Children.Add(Button(LocalizationKeys.ButtonChooseRunnerDirectory, async () =>
         {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
                 AllowMultiple = false,
                 Title = T(LocalizationKeys.GitHubRunnerDirectoryField)
@@ -635,12 +852,18 @@ public sealed class SettingsWindow : Window
             if (!string.IsNullOrWhiteSpace(path))
             {
                 _gitHubRunnerDirectory = path;
-                BuildSelectedPage();
+                rebuild();
             }
         }));
-        runnerButtons.Children.Add(Button(LocalizationKeys.GitHubCreateConfigureRunnerButton, async () => await CreateAndConfigureGitHubRunnerAsync(), _gitHubAccount.IsSignedIn));
+        runnerButtons.Children.Add(Button(LocalizationKeys.GitHubCreateConfigureRunnerButton, async () =>
+        {
+            var created = await CreateAndConfigureGitHubRunnerAsync();
+            if (created)
+                owner.Close(true);
+            else
+                rebuild();
+        }, _gitHubAccount.IsSignedIn));
         panel.Children.Add(runnerButtons);
-        return Scroll(panel);
     }
 
     private string GitHubAccountText()
@@ -659,7 +882,7 @@ public sealed class SettingsWindow : Window
         QueueSelectedPageRefresh();
     }
 
-    private async Task SignInGitHubAsync()
+    private async Task SignInGitHubAsync(GitHubAccountConnectionKind kind)
     {
         if (_gitHubService == null || _preferences == null)
             return;
@@ -676,7 +899,7 @@ public sealed class SettingsWindow : Window
             _gitHubVerificationUri = string.IsNullOrWhiteSpace(flow.VerificationUriComplete) ? flow.VerificationUri : flow.VerificationUriComplete;
             OpenUrl(_gitHubVerificationUri);
             BuildSelectedPage();
-            await _gitHubService.CompleteDeviceFlowAsync(clientId, flow.DeviceCode, flow.Interval);
+            await _gitHubService.CompleteDeviceFlowAsync(clientId, flow.DeviceCode, flow.Interval, kind, "");
             _gitHubDeviceCode = null;
             _gitHubVerificationUri = null;
             await RefreshGitHubAccountAsync();
@@ -690,6 +913,16 @@ public sealed class SettingsWindow : Window
         BuildSelectedPage();
     }
 
+    private async Task CopyDeviceCodeAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_gitHubDeviceCode) && Clipboard != null)
+        {
+            await Clipboard.SetTextAsync(_gitHubDeviceCode);
+            _gitHubStatus = T(LocalizationKeys.GitHubDeviceCodeCopied);
+            BuildSelectedPage();
+        }
+    }
+
     private async Task SignOutGitHubAsync()
     {
         if (_gitHubService == null)
@@ -700,10 +933,10 @@ public sealed class SettingsWindow : Window
         BuildSelectedPage();
     }
 
-    private async Task CreateAndConfigureGitHubRunnerAsync()
+    private async Task<bool> CreateAndConfigureGitHubRunnerAsync()
     {
         if (_gitHubService == null || _store == null)
-            return;
+            return false;
 
         try
         {
@@ -722,7 +955,12 @@ public sealed class SettingsWindow : Window
                 ? T(LocalizationKeys.GitHubStatusConfigured)
                 : T(LocalizationKeys.GitHubStatusError, result.Message);
             if (result.RunnerProfile != null)
+            {
                 _store.AddRunnerProfile(result.RunnerProfile);
+                _selectedRunnerId = result.RunnerProfile.Id;
+            }
+            BuildSelectedPage();
+            return result.Succeeded;
         }
         catch (Exception ex)
         {
@@ -730,6 +968,7 @@ public sealed class SettingsWindow : Window
         }
 
         BuildSelectedPage();
+        return false;
     }
 
     private Control BuildUpdatesPage()
@@ -939,6 +1178,16 @@ public sealed class SettingsWindow : Window
         };
     }
 
+    private static Control Separator()
+    {
+        return new Border
+        {
+            Height = 1,
+            Background = SidebarBorderBrush,
+            Margin = new Thickness(0, 8)
+        };
+    }
+
     private Grid Row(string key, string value)
     {
         var grid = new Grid
@@ -1023,18 +1272,32 @@ public sealed class SettingsWindow : Window
         };
     }
 
+    private static WrapPanel ButtonWrap()
+    {
+        return new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 2),
+            ItemSpacing = 10,
+            LineSpacing = 10
+        };
+    }
+
     private Button Button(string text, Action action, bool isEnabled = true)
     {
         var button = new Button
         {
-            Content = text,
+            Content = ButtonContent(text),
             IsEnabled = isEnabled,
             Background = FieldBrush,
             Foreground = PrimaryTextBrush,
             BorderBrush = SidebarBorderBrush,
             FontSize = 15,
             Padding = new Thickness(12, 6),
-            CornerRadius = new CornerRadius(8)
+            CornerRadius = new CornerRadius(8),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
         };
         button.Click += (_, _) =>
         {
@@ -1060,14 +1323,16 @@ public sealed class SettingsWindow : Window
     {
         var button = new Button
         {
-            Content = T(key),
+            Content = ButtonContent(T(key)),
             IsEnabled = isEnabled,
             Background = FieldBrush,
             Foreground = PrimaryTextBrush,
             BorderBrush = SidebarBorderBrush,
             FontSize = 15,
             Padding = new Thickness(12, 6),
-            CornerRadius = new CornerRadius(8)
+            CornerRadius = new CornerRadius(8),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
         };
         button.Click += async (_, _) =>
         {
@@ -1084,9 +1349,29 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
+    private static TextBlock ButtonContent(string text)
+    {
+        return new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            MaxWidth = 240
+        };
+    }
+
     private Button LinkButton(string key, string url)
     {
         return Button(key, () => OpenUrl(url));
+    }
+
+    private Button DestructiveButton(string key, Func<Task> action)
+    {
+        var button = Button(key, action);
+        button.Background = Brush("#3a2b2b");
+        button.BorderBrush = Brush("#8b4f4f");
+        button.Foreground = Brush("#f0d0d0");
+        return button;
     }
 
     private static void OpenUrl(string url)

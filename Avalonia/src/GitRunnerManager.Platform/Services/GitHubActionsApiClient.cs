@@ -35,7 +35,9 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         foreach (var runner in runners)
             runnerInfos.Add(await GetRunnerInfoAsync(runner, accounts, cancellationToken));
 
-        var repositories = await GetRepositoriesAsync(runners, accounts, cancellationToken);
+        var repositoryResult = await GetRepositoriesAsync(runners, accounts, cancellationToken);
+        var repositories = repositoryResult.Repositories;
+        permission = MergePermission(permission, repositoryResult.PermissionStatus);
         var runs = new List<GitHubWorkflowRunInfo>();
         foreach (var repository in repositories.Take(12))
         {
@@ -43,13 +45,14 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             runs.AddRange(repositoryRuns);
         }
 
-        runs = [.. runs.OrderByDescending(run => run.StartedAt ?? DateTimeOffset.MinValue).Take(30)];
+        runs = [.. runs.OrderByDescending(run => run.StartedAt ?? run.CreatedAt ?? DateTimeOffset.MinValue).Take(30)];
         if (runnerInfos.Any(runner => !string.IsNullOrWhiteSpace(runner.PermissionMessage)))
-            permission = permission.withRunnerPermissionMessage("Organization runner details require admin permission.");
+            permission = permission.withRunnerPermissionMessage("Runner metadata requires additional GitHub permission.");
 
         return new GitHubDashboardSnapshot
         {
             Account = account,
+            Repositories = repositories,
             Runners = runnerInfos,
             WorkflowRuns = runs,
             PermissionStatus = permission,
@@ -101,7 +104,9 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             : $"https://api.github.com/repos/{runner.GitHubOwnerOrOrg}/{runner.RepositoryName}/actions/runners?per_page=100";
         var response = await SendBestAccountAsync(HttpMethod.Get, path, runner.GitHubOwnerOrOrg, accounts, cancellationToken);
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
-            return fallback.withPermission("Organization runner details require admin permission.");
+            return fallback.withPermission(runner.IsOrganizationRunner
+                ? "Organization runner details require admin permission."
+                : "Repository runner details require repository administration permission.");
         if (!response.IsSuccessStatusCode)
             return fallback;
 
@@ -163,7 +168,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         return parsed?.Repositories.Select(MapRepository).ToList() ?? [];
     }
 
-    private async Task<IReadOnlyList<GitHubRepositoryInfo>> GetRepositoriesAsync(IReadOnlyList<RunnerConfig> runners, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
+    private async Task<RepositoryLoadResult> GetRepositoriesAsync(IReadOnlyList<RunnerConfig> runners, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
     {
         var configured = runners
             .Where(runner => !runner.IsOrganizationRunner && !string.IsNullOrWhiteSpace(runner.GitHubOwnerOrOrg) && !string.IsNullOrWhiteSpace(runner.RepositoryName))
@@ -172,25 +177,39 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
                 Owner = runner.GitHubOwnerOrOrg,
                 Name = runner.RepositoryName!,
                 FullName = $"{runner.GitHubOwnerOrOrg}/{runner.RepositoryName}",
-                HtmlUrl = $"https://github.com/{runner.GitHubOwnerOrOrg}/{runner.RepositoryName}"
+                HtmlUrl = $"https://github.com/{runner.GitHubOwnerOrOrg}/{runner.RepositoryName}",
+                ActionsEnabled = true
             })
             .ToList();
         if (configured.Count > 0)
-            return configured.DistinctBy(repository => repository.FullName).ToList();
+            return new RepositoryLoadResult(configured.DistinctBy(repository => repository.FullName).ToList(), new GitHubApiPermissionStatus());
 
         var result = new List<GitHubRepositoryInfo>();
+        var permission = new GitHubApiPermissionStatus();
         foreach (var account in accounts)
         {
             var response = await SendAsync(HttpMethod.Get, "https://api.github.com/user/repos?per_page=20&sort=pushed&affiliation=owner,collaborator,organization_member", account.Token, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.Forbidden && IsRateLimited(response))
+            {
+                permission = permission.withRateLimit("GitHub API rate limit reached while loading repositories.");
+                continue;
+            }
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                permission = permission.withWorkflowAccess(false, "Repository Actions visibility requires repository read access.");
+                continue;
+            }
+
             if (!response.IsSuccessStatusCode)
                 continue;
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             var repositories = JsonSerializer.Deserialize<List<RepositoryResponse>>(body, JsonOptions.Default) ?? [];
-            result.AddRange(repositories.Select(MapRepository).Where(repository => !string.IsNullOrWhiteSpace(repository.FullName)));
+            result.AddRange(repositories.Select(MapRepository).Where(repository => !string.IsNullOrWhiteSpace(repository.FullName) && repository.ActionsEnabled));
         }
 
-        return result.DistinctBy(repository => repository.FullName).ToList();
+        return new RepositoryLoadResult(result.DistinctBy(repository => repository.FullName).ToList(), permission);
     }
 
     private async Task<IReadOnlyList<GitHubWorkflowRunInfo>> GetWorkflowRunsAsync(GitHubRepositoryInfo repository, IReadOnlyList<RunnerConfig> runners, IReadOnlyList<GitHubStoredAccount> accounts, CancellationToken cancellationToken)
@@ -211,7 +230,12 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             if (info.IsActive)
             {
                 var jobs = await GetJobsAsync(info, cancellationToken);
-                info = info.withRunningOnThisRunner(jobs.Any(job => GitHubJobMatcher.IsRunningOnLocalRunner(job, runners)));
+                var bestCorrelation = jobs
+                    .Select(job => GitHubJobMatcher.Match(job, runners, null, RunnerResourceUsage.Zero))
+                    .OrderBy(correlation => correlation.Confidence)
+                    .FirstOrDefault();
+                if (jobs.Count > 0 && bestCorrelation.Confidence != GitHubCorrelationConfidence.Unknown)
+                    info = info.withRunningOnThisRunner(bestCorrelation.Confidence, bestCorrelation.Reason);
             }
             result.Add(info);
         }
@@ -261,27 +285,49 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         return await _httpClient.SendAsync(request, cancellationToken);
     }
 
-    private static GitHubRepositoryInfo MapRepository(RepositoryResponse repository)
+    private static bool IsRateLimited(HttpResponseMessage response)
+    {
+        return response.Headers.TryGetValues("x-ratelimit-remaining", out var values) && values.FirstOrDefault() == "0";
+    }
+
+    private static GitHubApiPermissionStatus MergePermission(GitHubApiPermissionStatus current, GitHubApiPermissionStatus next)
+    {
+        return new GitHubApiPermissionStatus
+        {
+            HasWorkflowAccess = current.HasWorkflowAccess && next.HasWorkflowAccess,
+            HasRunnerAdminAccess = current.HasRunnerAdminAccess && next.HasRunnerAdminAccess,
+            HasRepositoryRunnerAccess = current.HasRepositoryRunnerAccess && next.HasRepositoryRunnerAccess,
+            HasOrganizationRunnerAccess = current.HasOrganizationRunnerAccess && next.HasOrganizationRunnerAccess,
+            IsRateLimited = current.IsRateLimited || next.IsRateLimited,
+            Message = string.Join(" ", new[] { current.Message, next.Message }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim(),
+            TechnicalDetails = string.Join(" ", new[] { current.TechnicalDetails, next.TechnicalDetails }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim()
+        };
+    }
+
+    internal static GitHubRepositoryInfo MapRepository(RepositoryResponse repository)
     {
         return new GitHubRepositoryInfo
         {
             Owner = repository.Owner?.Login ?? "",
             Name = repository.Name ?? "",
             FullName = repository.FullName ?? "",
-            HtmlUrl = repository.HtmlUrl ?? ""
+            HtmlUrl = repository.HtmlUrl ?? "",
+            ActionsEnabled = repository.HasActions
         };
     }
 
-    private static GitHubWorkflowRunInfo MapRun(string repositoryFullName, RunResponse run)
+    internal static GitHubWorkflowRunInfo MapRun(string repositoryFullName, RunResponse run)
     {
         return new GitHubWorkflowRunInfo
         {
             Id = run.Id,
             RepositoryFullName = repositoryFullName,
             WorkflowName = run.Name ?? run.DisplayTitle ?? "Workflow",
+            RunNumber = run.RunNumber,
             Branch = run.HeadBranch ?? "",
             Status = run.Status ?? "unknown",
             Conclusion = run.Conclusion ?? "unknown",
+            CreatedAt = run.CreatedAt,
             StartedAt = run.RunStartedAt ?? run.CreatedAt,
             UpdatedAt = run.UpdatedAt,
             Actor = run.Actor?.Login ?? "",
@@ -290,7 +336,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         };
     }
 
-    private static GitHubWorkflowJobInfo MapJob(JobResponse job)
+    internal static GitHubWorkflowJobInfo MapJob(JobResponse job)
     {
         return new GitHubWorkflowJobInfo
         {
@@ -299,12 +345,30 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             Status = job.Status ?? "unknown",
             Conclusion = job.Conclusion ?? "unknown",
             RunnerName = job.RunnerName ?? "",
+            RunnerGroupName = job.RunnerGroupName ?? "",
+            Labels = job.Labels.Where(label => !string.IsNullOrWhiteSpace(label)).ToList(),
             StartedAt = job.StartedAt,
             CompletedAt = job.CompletedAt,
-            HtmlUrl = job.HtmlUrl ?? ""
+            HtmlUrl = job.HtmlUrl ?? "",
+            Steps = job.Steps.Select(MapStep).ToList()
+        };
+    }
+
+    internal static GitHubWorkflowStepInfo MapStep(StepResponse step)
+    {
+        return new GitHubWorkflowStepInfo
+        {
+            Name = step.Name ?? "",
+            Status = step.Status ?? "",
+            Conclusion = step.Conclusion ?? "",
+            Number = step.Number,
+            StartedAt = step.StartedAt,
+            CompletedAt = step.CompletedAt
         };
     }
 }
+
+internal sealed record RepositoryLoadResult(IReadOnlyList<GitHubRepositoryInfo> Repositories, GitHubApiPermissionStatus PermissionStatus);
 
 internal static class GitHubInfoExtensions
 {
@@ -323,28 +387,57 @@ internal static class GitHubInfoExtensions
         PermissionMessage = message
     };
 
-    public static GitHubWorkflowRunInfo withRunningOnThisRunner(this GitHubWorkflowRunInfo run, bool value) => new()
+    public static GitHubWorkflowRunInfo withRunningOnThisRunner(this GitHubWorkflowRunInfo run, GitHubCorrelationConfidence confidence, string reason) => new()
     {
         Id = run.Id,
         RepositoryFullName = run.RepositoryFullName,
         WorkflowName = run.WorkflowName,
+        RunNumber = run.RunNumber,
         Branch = run.Branch,
         Status = run.Status,
         Conclusion = run.Conclusion,
+        CreatedAt = run.CreatedAt,
         StartedAt = run.StartedAt,
         UpdatedAt = run.UpdatedAt,
         Actor = run.Actor,
         HtmlUrl = run.HtmlUrl,
         JobsUrl = run.JobsUrl,
-        IsRunningOnThisRunner = value
+        IsRunningOnThisRunner = confidence != GitHubCorrelationConfidence.Unknown,
+        CorrelationConfidence = confidence,
+        CorrelationReason = reason
     };
 
     public static GitHubApiPermissionStatus withRunnerPermissionMessage(this GitHubApiPermissionStatus status, string message) => new()
     {
         HasWorkflowAccess = status.HasWorkflowAccess,
         HasRunnerAdminAccess = false,
+        HasRepositoryRunnerAccess = status.HasRepositoryRunnerAccess,
+        HasOrganizationRunnerAccess = false,
         IsRateLimited = status.IsRateLimited,
-        Message = message
+        Message = message,
+        TechnicalDetails = status.TechnicalDetails
+    };
+
+    public static GitHubApiPermissionStatus withWorkflowAccess(this GitHubApiPermissionStatus status, bool hasAccess, string message) => new()
+    {
+        HasWorkflowAccess = hasAccess,
+        HasRunnerAdminAccess = status.HasRunnerAdminAccess,
+        HasRepositoryRunnerAccess = status.HasRepositoryRunnerAccess,
+        HasOrganizationRunnerAccess = status.HasOrganizationRunnerAccess,
+        IsRateLimited = status.IsRateLimited,
+        Message = message,
+        TechnicalDetails = status.TechnicalDetails
+    };
+
+    public static GitHubApiPermissionStatus withRateLimit(this GitHubApiPermissionStatus status, string message) => new()
+    {
+        HasWorkflowAccess = status.HasWorkflowAccess,
+        HasRunnerAdminAccess = status.HasRunnerAdminAccess,
+        HasRepositoryRunnerAccess = status.HasRepositoryRunnerAccess,
+        HasOrganizationRunnerAccess = status.HasOrganizationRunnerAccess,
+        IsRateLimited = true,
+        Message = message,
+        TechnicalDetails = "x-ratelimit-remaining=0"
     };
 }
 
@@ -412,6 +505,8 @@ internal sealed class RepositoryResponse
     public string? HtmlUrl { get; set; }
     [JsonPropertyName("owner")]
     public OwnerResponse? Owner { get; set; }
+    [JsonPropertyName("has_actions")]
+    public bool HasActions { get; set; } = true;
 }
 
 internal sealed class OwnerResponse
@@ -430,6 +525,8 @@ internal sealed class RunResponse
 {
     [JsonPropertyName("id")]
     public long Id { get; set; }
+    [JsonPropertyName("run_number")]
+    public long RunNumber { get; set; }
     [JsonPropertyName("name")]
     public string? Name { get; set; }
     [JsonPropertyName("display_title")]
@@ -472,10 +569,32 @@ internal sealed class JobResponse
     public string? Conclusion { get; set; }
     [JsonPropertyName("runner_name")]
     public string? RunnerName { get; set; }
+    [JsonPropertyName("runner_group_name")]
+    public string? RunnerGroupName { get; set; }
+    [JsonPropertyName("labels")]
+    public List<string> Labels { get; set; } = [];
     [JsonPropertyName("started_at")]
     public DateTimeOffset? StartedAt { get; set; }
     [JsonPropertyName("completed_at")]
     public DateTimeOffset? CompletedAt { get; set; }
     [JsonPropertyName("html_url")]
     public string? HtmlUrl { get; set; }
+    [JsonPropertyName("steps")]
+    public List<StepResponse> Steps { get; set; } = [];
+}
+
+internal sealed class StepResponse
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+    [JsonPropertyName("conclusion")]
+    public string? Conclusion { get; set; }
+    [JsonPropertyName("number")]
+    public int Number { get; set; }
+    [JsonPropertyName("started_at")]
+    public DateTimeOffset? StartedAt { get; set; }
+    [JsonPropertyName("completed_at")]
+    public DateTimeOffset? CompletedAt { get; set; }
 }
