@@ -148,9 +148,6 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
             return;
         }
 
-        if (!Profile.AutomaticModeEnabled)
-            return;
-
         switch (globalControlMode)
         {
             case RunnerControlMode.ForceRunning:
@@ -160,6 +157,9 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
                 await _controller.StopAsync();
                 return;
         }
+
+        if (!Profile.AutomaticModeEnabled)
+            return;
 
         if (!Profile.AutoStartEnabled)
             return;

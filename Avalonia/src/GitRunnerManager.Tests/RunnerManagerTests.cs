@@ -40,6 +40,60 @@ public class RunnerManagerTests
     }
 
     [Fact]
+    public async Task RefreshAll_GlobalManualStartIgnoresPerRunnerAutomaticMode()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig { Id = "one", DisplayName = "One", RunnerDirectory = "/tmp/one", AutomaticModeEnabled = false },
+                new RunnerConfig { Id = "two", DisplayName = "Two", RunnerDirectory = "/tmp/two", AutomaticModeEnabled = false }
+            ]
+        };
+        var controllerFactory = new FakeControllerFactory();
+        var manager = new RunnerManager(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService());
+
+        await manager.RefreshAllAsync(
+            new NetworkConditionSnapshot { Kind = NetworkConditionKind.Unmetered, Description = "unmetered" },
+            BatterySnapshot.NoBattery,
+            RunnerControlMode.ForceRunning);
+
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/one"].StartCount);
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/two"].StartCount);
+    }
+
+    [Fact]
+    public async Task RefreshAll_GlobalManualStopIgnoresPerRunnerAutomaticMode()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig { Id = "one", DisplayName = "One", RunnerDirectory = "/tmp/one", AutomaticModeEnabled = false },
+                new RunnerConfig { Id = "two", DisplayName = "Two", RunnerDirectory = "/tmp/two", AutomaticModeEnabled = false }
+            ]
+        };
+        var controllerFactory = new FakeControllerFactory();
+        var manager = new RunnerManager(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService());
+
+        await manager.RefreshAllAsync(
+            new NetworkConditionSnapshot { Kind = NetworkConditionKind.Unmetered, Description = "unmetered" },
+            BatterySnapshot.NoBattery,
+            RunnerControlMode.ForceStopped);
+
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/one"].StopCount);
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/two"].StopCount);
+    }
+
+    [Fact]
     public void RunnerUpdateDecision_ComparesSemanticVersions()
     {
         Assert.True(RunnerUpdateDecision.IsUpdateAvailable("2.300.0", "2.301.0"));
