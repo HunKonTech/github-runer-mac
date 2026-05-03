@@ -14,8 +14,14 @@ INPUT:
 
 OUTPUT:
 - Hungarian
-
 ---
+
+## RESPONSE STYLE
+
+- minimal output
+- use as few tokens as possible
+- prefer 1–2 word answers when sufficient
+- no explanations unless explicitly requested
 
 ## CLARIFICATION RULE
 

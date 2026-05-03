@@ -467,6 +467,7 @@ public sealed class TrayMenuWindow : Window
             }
             catch (Exception ex)
             {
+                DiagnosticLog.WriteException($"Tray action failed: {T(key)}", ex);
                 _store.LastErrorMessage = T(LocalizationKeys.ErrorRunnerHandling).Replace("{0}", ex.Message);
                 Build();
             }

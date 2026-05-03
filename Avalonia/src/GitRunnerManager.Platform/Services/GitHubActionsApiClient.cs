@@ -12,23 +12,38 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
 {
     private readonly IGitHubTokenStore _tokenStore;
     private readonly IGitHubAuthService _authService;
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient;
 
-    public GitHubActionsApiClient(IGitHubTokenStore tokenStore, IGitHubAuthService authService)
+    public GitHubActionsApiClient(IGitHubTokenStore tokenStore, IGitHubAuthService authService, HttpClient? httpClient = null)
     {
         _tokenStore = tokenStore;
         _authService = authService;
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("GitRunnerManager");
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        _httpClient = httpClient ?? new HttpClient();
+        if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("GitRunnerManager");
+        if (!_httpClient.DefaultRequestHeaders.Accept.Any())
+            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        if (!_httpClient.DefaultRequestHeaders.Contains("X-GitHub-Api-Version"))
+            _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
     }
 
     public async Task<GitHubDashboardSnapshot> GetDashboardAsync(IReadOnlyList<RunnerConfig> runners, CancellationToken cancellationToken = default)
     {
+        DiagnosticLog.Write("[Dashboard] GetDashboardAsync started");
         var account = await _authService.GetAccountAsync(cancellationToken);
-        var accounts = await _tokenStore.GetAccountsAsync();
-        if (!account.IsSignedIn || accounts.Count == 0)
+        DiagnosticLog.Write($"[Dashboard] authService.GetAccountAsync: IsSignedIn={account.IsSignedIn}, Login={account.Login}, Error={account.Error}");
+        var accounts = await GetUsableAccountsAsync(account);
+        DiagnosticLog.Write($"[Dashboard] GetUsableAccountsAsync: {accounts.Count} account(s): {string.Join(", ", accounts.Select(a => $"{a.Login}(Kind={a.Kind},HasToken={!string.IsNullOrWhiteSpace(a.Token)})"))}");
+        if (accounts.Count == 0)
+        {
+            DiagnosticLog.Write("[Dashboard] No usable accounts, returning empty snapshot");
             return new GitHubDashboardSnapshot { Account = account };
+        }
+        if (!account.IsSignedIn)
+        {
+            account = AccountFromStoredConnection(accounts[0], account.Error);
+            DiagnosticLog.Write($"[Dashboard] Used stored account fallback: IsSignedIn={account.IsSignedIn}, Login={account.Login}");
+        }
 
         var permission = new GitHubApiPermissionStatus();
         var runnerInfos = new List<GitHubRunnerInfo>();
@@ -49,6 +64,7 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
         if (runnerInfos.Any(runner => !string.IsNullOrWhiteSpace(runner.PermissionMessage)))
             permission = permission.withRunnerPermissionMessage("Runner metadata requires additional GitHub permission.");
 
+        DiagnosticLog.Write($"[Dashboard] Done: repos={repositories.Count}, runs={runs.Count}, runners={runnerInfos.Count}");
         return new GitHubDashboardSnapshot
         {
             Account = account,
@@ -57,6 +73,38 @@ public sealed class GitHubActionsApiClient : IGitHubActionsService
             WorkflowRuns = runs,
             PermissionStatus = permission,
             RefreshedAt = DateTimeOffset.Now
+        };
+    }
+
+    private async Task<IReadOnlyList<GitHubStoredAccount>> GetUsableAccountsAsync(GitHubAccountInfo account)
+    {
+        var accounts = (await _tokenStore.GetAccountsAsync()).ToList();
+        DiagnosticLog.Write($"[Dashboard] _tokenStore.GetAccountsAsync: {accounts.Count} account(s)");
+        if (accounts.Count > 0)
+            return accounts;
+
+        var legacyToken = await _tokenStore.GetTokenAsync();
+        DiagnosticLog.Write($"[Dashboard] Legacy token present: {!string.IsNullOrWhiteSpace(legacyToken)}");
+        if (string.IsNullOrWhiteSpace(legacyToken))
+            return accounts;
+
+        accounts.Add(new GitHubStoredAccount
+        {
+            Id = "legacy",
+            Login = account.Login ?? "GitHub",
+            Token = legacyToken,
+            Kind = GitHubAccountConnectionKind.Personal
+        });
+        return accounts;
+    }
+
+    private static GitHubAccountInfo AccountFromStoredConnection(GitHubAccountConnection account, string? error)
+    {
+        return new GitHubAccountInfo
+        {
+            IsSignedIn = true,
+            Login = string.IsNullOrWhiteSpace(account.Login) ? "GitHub" : account.Login,
+            Error = error
         };
     }
 

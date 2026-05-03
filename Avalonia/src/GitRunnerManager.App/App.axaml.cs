@@ -271,15 +271,26 @@ public partial class App : Application
 
     private void ShowActionsDashboardWindow()
     {
-        if (_actionsDashboardWindow == null)
+        DiagnosticLog.Write("[Actions] Dashboard window requested");
+        try
         {
-            var viewModel = new ActionsDashboardViewModel(_store!, _preferences!, _gitHubAuthService!, _gitHubActionsService!, _localization!);
-            _actionsDashboardWindow = new ActionsDashboardWindow(viewModel, _localization!, ShowGitHubAccountsSettingsWindow);
-            _actionsDashboardWindow.Closed += (_, _) => _actionsDashboardWindow = null;
-        }
+            if (_actionsDashboardWindow == null)
+            {
+                var viewModel = new ActionsDashboardViewModel(_store!, _preferences!, _gitHubAuthService!, _gitHubActionsService!, _localization!);
+                _actionsDashboardWindow = new ActionsDashboardWindow(viewModel, _localization!, ShowGitHubAccountsSettingsWindow);
+                _actionsDashboardWindow.Closed += (_, _) => _actionsDashboardWindow = null;
+                DiagnosticLog.Write("[Actions] Dashboard window created");
+            }
 
-        _actionsDashboardWindow.Show();
-        _actionsDashboardWindow.Activate();
+            _actionsDashboardWindow.Show();
+            _actionsDashboardWindow.Activate();
+            DiagnosticLog.Write("[Actions] Dashboard window shown");
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.WriteException("[Actions] Dashboard window failed to open", ex);
+            throw;
+        }
     }
 
     private void ShowGitHubAccountsSettingsWindow()

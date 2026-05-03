@@ -142,18 +142,24 @@ public class GitHubService : IGitHubService, IGitHubAuthService
     {
         var candidates = new List<string>();
         var token = await _credentialStore.GetGitHubTokenAsync();
+        DiagnosticLog.Write($"[GitHubService] Legacy token present: {!string.IsNullOrWhiteSpace(token)}");
         if (!string.IsNullOrWhiteSpace(token))
             candidates.Add(token);
 
         var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
+        DiagnosticLog.Write($"[GitHubService] Stored accounts: {accounts.Count}");
         candidates.AddRange(accounts.Select(account => account.Token));
         candidates = candidates
             .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
             .Distinct()
             .ToList();
 
+        DiagnosticLog.Write($"[GitHubService] Token candidates: {candidates.Count}");
         if (candidates.Count == 0)
+        {
+            DiagnosticLog.Write("[GitHubService] No token candidates, returning not signed in");
             return new GitHubAccountInfo { IsSignedIn = false };
+        }
 
         GitHubAccountInfo? lastFailure = null;
         foreach (var candidate in candidates)
@@ -161,6 +167,7 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             try
             {
                 var account = await GetAccountInfoAsync(candidate, cancellationToken);
+                DiagnosticLog.Write($"[GitHubService] Token validation: IsSignedIn={account.IsSignedIn}, Login={account.Login}, Error={account.Error}");
                 if (account.IsSignedIn)
                     return account;
 
@@ -172,10 +179,12 @@ public class GitHubService : IGitHubService, IGitHubAuthService
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
             {
+                DiagnosticLog.Write($"[GitHubService] Token validation exception: {ex.GetType().Name}: {ex.Message}");
                 lastFailure = new GitHubAccountInfo { IsSignedIn = false, Error = ex.Message };
             }
         }
 
+        DiagnosticLog.Write($"[GitHubService] All candidates failed, last error: {lastFailure?.Error}");
         return lastFailure ?? new GitHubAccountInfo { IsSignedIn = false };
     }
 

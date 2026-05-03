@@ -31,6 +31,19 @@ public class DiagnosticLogTests : IDisposable
         Assert.Contains("boom", content);
     }
 
+    [Fact]
+    public void Write_WithUnavailableDefaultPath_DoesNotThrow()
+    {
+        var fileAsDirectory = Path.Combine(_directory, "not-a-directory");
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(fileAsDirectory, "");
+        var path = Path.Combine(fileAsDirectory, "app.log");
+
+        var exception = Record.Exception(() => DiagnosticLog.Write("fallback diagnostic", path));
+
+        Assert.Null(exception);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

@@ -87,6 +87,37 @@ public class RunnerManagerTests
     }
 
     [Fact]
+    public async Task TryRefreshNowAsync_ReturnsFalseWhenRefreshIsAlreadyRunning()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            ControlMode = RunnerControlMode.ForceRunning,
+            RunnerProfiles =
+            [
+                new RunnerConfig
+                {
+                    Id = "one",
+                    DisplayName = "One",
+                    RunnerDirectory = "/tmp/one"
+                }
+            ]
+        };
+        var controllerFactory = new BlockingStartControllerFactory();
+        using var store = new RunnerTrayStore(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService(),
+            new FakeNetworkMonitor(),
+            new FakeBatteryMonitorFactory());
+
+        Assert.True(await controllerFactory.WaitForStartAsync(TimeSpan.FromSeconds(2)));
+        Assert.False(await store.TryRefreshNowAsync());
+
+        controllerFactory.Release();
+    }
+
+    [Fact]
     public async Task RefreshAll_DefersAutomaticStopWhileJobIsActive()
     {
         var prefs = new InMemoryPreferencesStore
@@ -335,5 +366,51 @@ internal sealed class ActiveJobResourceMonitor : IResourceMonitor
 
     public void Stop()
     {
+    }
+}
+
+internal sealed class BlockingStartControllerFactory : IRunnerControllerFactory
+{
+    private readonly TaskCompletionSource _startStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public IRunnerController Create(DirectoryInfo runnerDirectory)
+    {
+        return new BlockingStartController(_startStarted, _release);
+    }
+
+    public async Task<bool> WaitForStartAsync(TimeSpan timeout)
+    {
+        var completed = await Task.WhenAny(_startStarted.Task, Task.Delay(timeout));
+        return completed == _startStarted.Task;
+    }
+
+    public void Release()
+    {
+        _release.TrySetResult();
+    }
+}
+
+internal sealed class BlockingStartController(TaskCompletionSource startStarted, TaskCompletionSource release) : IRunnerController
+{
+    public RunnerSnapshot GetCurrentSnapshot()
+    {
+        return RunnerSnapshot.Stopped;
+    }
+
+    public Task StartAsync()
+    {
+        startStarted.TrySetResult();
+        return release.Task;
+    }
+
+    public Task StopAsync()
+    {
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        release.TrySetResult();
     }
 }

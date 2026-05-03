@@ -47,6 +47,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         _actionsService = actionsService;
         _localization = localization;
         oauthClientId = preferences.GitHubOAuthClientId;
+        DiagnosticLog.Write("[Actions] ViewModel created (v2)");
     }
 
     partial void OnOauthClientIdChanged(string value)
@@ -66,6 +67,7 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     public void StartPolling()
     {
+        DiagnosticLog.Write("[Actions] StartPolling called");
         _pollingCts?.Cancel();
         _pollingCts = new CancellationTokenSource();
         IsRealtimeRefreshActive = true;
@@ -81,27 +83,41 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
+        DiagnosticLog.Write($"[Actions] RefreshAsync entered, IsLoading={IsLoading}");
         if (IsLoading)
+        {
+            DiagnosticLog.Write("[Actions] RefreshAsync skipped: already loading");
             return;
+        }
 
         IsLoading = true;
         try
         {
-            Account = await _authService.GetAccountAsync(cancellationToken);
+            DiagnosticLog.Write("[Actions] RefreshAsync started");
             Accounts = await _authService.GetAccountsAsync(cancellationToken);
-            if (!Account.IsSignedIn || Accounts.Count == 0)
+            DiagnosticLog.Write($"[Actions] GetAccountsAsync returned {Accounts.Count} account(s): {string.Join(", ", Accounts.Select(a => $"{a.Login}({a.Kind})"))}");
+            if (Accounts.Count == 0)
             {
-                WorkflowRuns = [];
-                AllWorkflowRuns = [];
-                Repositories = [];
-                Runners = [];
-                SelectedJobs = [];
-                StatusMessage = Account.Error ?? T(LocalizationKeys.ActionsSignInRequired);
-                LastRefreshTime = DateTimeOffset.Now;
-                return;
+                var accountInfo = await _authService.GetAccountAsync(cancellationToken);
+                DiagnosticLog.Write($"[Actions] GetAccountAsync (no accounts stored): IsSignedIn={accountInfo.IsSignedIn}, Login={accountInfo.Login}, Error={accountInfo.Error}");
+                if (!accountInfo.IsSignedIn)
+                {
+                    WorkflowRuns = [];
+                    AllWorkflowRuns = [];
+                    Repositories = [];
+                    Runners = [];
+                    SelectedJobs = [];
+                    Account = accountInfo;
+                    StatusMessage = accountInfo.Error ?? T(LocalizationKeys.ActionsSignInRequired);
+                    LastRefreshTime = DateTimeOffset.Now;
+                    DiagnosticLog.Write("[Actions] Early return: no accounts and not signed in");
+                    return;
+                }
             }
 
+            DiagnosticLog.Write("[Actions] Calling GetDashboardAsync...");
             var snapshot = await _actionsService.GetDashboardAsync(_store.Runners.Select(runner => runner.Profile).ToList(), cancellationToken);
+            DiagnosticLog.Write($"[Actions] GetDashboardAsync returned: IsSignedIn={snapshot.Account.IsSignedIn}, Login={snapshot.Account.Login}, Repos={snapshot.Repositories.Count}, Runs={snapshot.WorkflowRuns.Count}, Runners={snapshot.Runners.Count}");
             Account = snapshot.Account;
             Repositories = snapshot.Repositories;
             Runners = MergeLocalRunnerState(snapshot.Runners);
@@ -115,9 +131,11 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
         }
         catch (OperationCanceledException)
         {
+            DiagnosticLog.Write("[Actions] RefreshAsync cancelled");
         }
         catch (Exception ex)
         {
+            DiagnosticLog.WriteException("[Actions] RefreshAsync exception", ex);
             StatusMessage = T(LocalizationKeys.GitHubStatusError, ex.Message);
         }
         finally
@@ -302,7 +320,16 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     private async Task PollAsync(CancellationToken cancellationToken)
     {
-        await RefreshLocalAndRemoteAsync(true, cancellationToken);
+        DiagnosticLog.Write("[Actions] PollAsync started");
+        try
+        {
+            await RefreshLocalAndRemoteAsync(true, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DiagnosticLog.WriteException("[Actions] PollAsync first refresh failed", ex);
+        }
+
         while (!cancellationToken.IsCancellationRequested)
         {
             var interval = IsAnyLocalRunnerBusy || WorkflowRuns.Any(run => run.IsActive)
@@ -320,7 +347,21 @@ public sealed partial class ActionsDashboardViewModel : ObservableObject, IDispo
 
     private async Task RefreshLocalAndRemoteAsync(bool forceRemote, CancellationToken cancellationToken)
     {
-        await _store.RefreshNowAsync();
+        DiagnosticLog.Write($"[Actions] RefreshLocalAndRemoteAsync forceRemote={forceRemote}");
+        var localRefresh = _store.TryRefreshNowAsync();
+        var completed = await Task.WhenAny(localRefresh, Task.Delay(TimeSpan.FromSeconds(2))) == localRefresh;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (completed)
+        {
+            var refreshed = await localRefresh;
+            if (!refreshed)
+                DiagnosticLog.Write("[Actions] Local refresh skipped: runner store is busy");
+        }
+        else
+        {
+            DiagnosticLog.Write("[Actions] Local refresh timed out; continuing remote refresh");
+        }
+
         Runners = MergeLocalRunnerState(Runners);
 
         var now = DateTimeOffset.Now;

@@ -175,6 +175,11 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         return ReconcileStateAsync("manual refresh");
     }
 
+    public Task<bool> TryRefreshNowAsync()
+    {
+        return TryReconcileStateAsync("manual refresh");
+    }
+
     public void SetAutomaticMode()
     {
         _ = SetAutomaticModeAsync();
@@ -283,6 +288,20 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     private async Task ReconcileStateAsync(string trigger)
     {
         await _reconcileLock.WaitAsync();
+        await ReconcileStateAfterLockAsync(trigger);
+    }
+
+    private async Task<bool> TryReconcileStateAsync(string trigger)
+    {
+        if (!await _reconcileLock.WaitAsync(0))
+            return false;
+
+        await ReconcileStateAfterLockAsync(trigger);
+        return true;
+    }
+
+    private async Task ReconcileStateAfterLockAsync(string trigger)
+    {
         try
         {
             var networkSnapshot = NetworkSnapshot;

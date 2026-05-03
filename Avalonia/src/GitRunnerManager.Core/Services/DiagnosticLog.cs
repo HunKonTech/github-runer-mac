@@ -6,6 +6,7 @@ public static class DiagnosticLog
 
     public static string DefaultLogDirectory => GetLogDirectory();
     public static string DefaultLogPath => Path.Combine(DefaultLogDirectory, "avalonia.log");
+    public static string FallbackLogPath => Path.Combine(Path.GetTempPath(), "GitRunnerManager", "Logs", "avalonia.log");
 
     public static void Write(string message, string? logPath = null)
     {
@@ -20,10 +21,39 @@ public static class DiagnosticLog
     private static void WriteEntry(string message, Exception? exception, string? logPath)
     {
         var path = logPath ?? DefaultLogPath;
+        var entry = FormatEntry(message, exception);
+
+        try
+        {
+            AppendEntry(path, entry);
+        }
+        catch (Exception writeException)
+        {
+            try
+            {
+                if (!string.Equals(path, FallbackLogPath, StringComparison.OrdinalIgnoreCase))
+                    AppendEntry(FallbackLogPath, FormatEntry($"Primary diagnostic log failed: {writeException.Message}", writeException) + entry);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static void AppendEntry(string path, string entry)
+    {
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
+        lock (SyncRoot)
+        {
+            File.AppendAllText(path, entry);
+        }
+    }
+
+    private static string FormatEntry(string message, Exception? exception)
+    {
         var lines = new List<string>
         {
             $"[{DateTimeOffset.UtcNow:O}] {message}"
@@ -32,10 +62,7 @@ public static class DiagnosticLog
         if (exception != null)
             lines.Add(exception.ToString());
 
-        lock (SyncRoot)
-        {
-            File.AppendAllText(path, string.Join(Environment.NewLine, lines) + Environment.NewLine);
-        }
+        return string.Join(Environment.NewLine, lines) + Environment.NewLine;
     }
 
     private static string GetLogDirectory()
