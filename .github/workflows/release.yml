@@ -114,11 +114,11 @@ jobs:
           GH_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
           OWNER: HunKonTech
         run: |
-          STATUS=$(gh api "orgs/${OWNER}/actions/runners" \
-            --jq '.runners[] | select(.name == "Koncsik-MacBook-Air") | .status' 2>/dev/null || echo "")
-          if [ "$STATUS" = "online" ]; then
+          RUNNER_NAME=$(gh api "orgs/${OWNER}/actions/runners?per_page=100" \
+            --jq '.runners[] | select(.status == "online" and ([.labels[].name] | index("self-hosted")) and ([.labels[].name] | index("macOS")) and ([.labels[].name] | index("ARM64"))) | .name' 2>/dev/null | head -n 1 || true)
+          if [ -n "$RUNNER_NAME" ]; then
             echo 'runner=["self-hosted","macOS","ARM64"]' >> "$GITHUB_OUTPUT"
-            echo "macOS Runner: Koncsik-MacBook-Air (online)"
+            echo "macOS Runner: ${RUNNER_NAME} (online)"
           else
             echo 'runner=["macos-latest"]' >> "$GITHUB_OUTPUT"
             echo "macOS Runner: macos-latest (fallback)"

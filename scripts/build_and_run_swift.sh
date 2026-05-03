@@ -22,7 +22,20 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 ICON_FILE="$SWIFT_DIR/Assets/AppIcon.icns"
 BUILD_PRODUCT="GitRunnerManager"
 
-pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
+should_stop_existing_app() {
+  case "$1" in
+    --bundle|bundle)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+if should_stop_existing_app "$MODE"; then
+  pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
+fi
 
 swift build --package-path "$SWIFT_DIR" -c "$BUILD_CONFIGURATION" --jobs 1
 BUILD_BINARY="$SWIFT_DIR/.build/$(uname -m)-apple-macosx/$BUILD_CONFIGURATION/$BUILD_PRODUCT"
