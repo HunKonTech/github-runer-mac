@@ -38,6 +38,9 @@ public class LaunchAtLoginService : ILaunchAtLoginService
     [SupportedOSPlatform("windows")]
     private static LaunchAtLoginStatus GetWindowsStatus()
     {
+        if (WindowsPackageIdentity.IsPackagedApp)
+            return LaunchAtLoginStatus.Unavailable;
+
         try
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath);
@@ -57,6 +60,9 @@ public class LaunchAtLoginService : ILaunchAtLoginService
     [SupportedOSPlatform("windows")]
     private static async Task<bool> SetWindowsEnabledAsync(bool enabled)
     {
+        if (WindowsPackageIdentity.IsPackagedApp)
+            return false;
+
         return await Task.Run(() =>
         {
             try

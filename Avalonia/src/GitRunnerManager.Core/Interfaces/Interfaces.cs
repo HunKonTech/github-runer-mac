@@ -166,6 +166,7 @@ public class AppUpdateInfo
     public required string Version { get; init; }
     public required string ReleasePageUrl { get; init; }
     public required string DownloadUrl { get; init; }
+    public string AssetName { get; init; } = string.Empty;
     public DateTime? PublishedAt { get; init; }
 }
 

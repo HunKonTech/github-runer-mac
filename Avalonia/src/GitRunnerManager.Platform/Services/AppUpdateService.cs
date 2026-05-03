@@ -57,6 +57,7 @@ public class AppUpdateService : IAppUpdateService
                 Version = release.TagName?.TrimStart('v') ?? "0.0.0",
                 ReleasePageUrl = release.HtmlUrl ?? "",
                 DownloadUrl = platformAsset.BrowserDownloadUrl ?? "",
+                AssetName = platformAsset.Name ?? "",
                 PublishedAt = release.PublishedAt
             };
         }
@@ -74,13 +75,9 @@ public class AppUpdateService : IAppUpdateService
             if (!response.IsSuccessStatusCode)
                 return;
 
-            var tempFile = Path.Combine(Path.GetTempPath(), $"GitRunnerManager_{update.Version}");
-            if (OperatingSystem.IsWindows())
-                tempFile += ".exe";
-            else if (OperatingSystem.IsMacOS())
-                tempFile += ".dmg";
-            else
-                tempFile += ".AppImage";
+            var tempFile = Path.Combine(
+                Path.GetTempPath(),
+                $"GitRunnerManager_{update.Version}{ResolveDownloadedFileExtension(update)}");
 
             await using (var fs = new FileStream(tempFile, FileMode.Create))
             {
@@ -100,7 +97,7 @@ public class AppUpdateService : IAppUpdateService
         }
     }
 
-    private static GitHubAsset? FindPlatformAsset(List<GitHubAsset>? assets)
+    internal static GitHubAsset? FindPlatformAsset(List<GitHubAsset>? assets)
     {
         if (assets == null || assets.Count == 0)
             return null;
@@ -108,10 +105,65 @@ public class AppUpdateService : IAppUpdateService
         var os = GetCurrentOs();
         var arch = GetCurrentArchitecture();
 
-        return assets.FirstOrDefault(a =>
-            a.Name?.Contains(os, StringComparison.OrdinalIgnoreCase) == true &&
-            a.Name?.Contains(arch, StringComparison.OrdinalIgnoreCase) == true) ?? assets.FirstOrDefault(a =>
-            a.Name?.Contains(os, StringComparison.OrdinalIgnoreCase) == true);
+        var candidates = assets
+            .Where(a => a.Name?.Contains(os, StringComparison.OrdinalIgnoreCase) == true &&
+                        a.Name?.Contains(arch, StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            candidates = assets
+                .Where(a => a.Name?.Contains(os, StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+        }
+
+        return candidates
+            .OrderBy(GetAssetPriority)
+            .ThenBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+    }
+
+    internal static string ResolveDownloadedFileExtension(AppUpdateInfo update)
+    {
+        var assetExtension = Path.GetExtension(update.AssetName);
+        if (!string.IsNullOrWhiteSpace(assetExtension))
+            return assetExtension;
+
+        if (Uri.TryCreate(update.DownloadUrl, UriKind.Absolute, out var uri))
+        {
+            var urlExtension = Path.GetExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(urlExtension))
+                return urlExtension;
+        }
+
+        if (OperatingSystem.IsWindows())
+            return ".exe";
+
+        if (OperatingSystem.IsMacOS())
+            return ".dmg";
+
+        return ".AppImage";
+    }
+
+    private static int GetAssetPriority(GitHubAsset asset)
+    {
+        var name = asset.Name ?? "";
+
+        if (OperatingSystem.IsWindows())
+        {
+            if (name.EndsWith(".msixbundle", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (name.EndsWith(".msix", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (name.EndsWith(".appinstaller", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return 3;
+        }
+
+        if (OperatingSystem.IsMacOS() && name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
+            return 0;
+
+        if (OperatingSystem.IsLinux() && name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase))
+            return 0;
+
+        return 10;
     }
 
     private static string GetCurrentOs()
