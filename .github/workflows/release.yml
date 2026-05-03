@@ -278,28 +278,17 @@ jobs:
       - name: Publish Avalonia Windows app
         shell: powershell
         run: |
-          $env:APP_VERSION = "${{ needs.prepare.outputs.package_version }}"
-          $git = (Get-Command git.exe -ErrorAction Stop).Source
-          $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
-          $bash = Join-Path $gitRoot "bin\bash.exe"
-          if (-not (Test-Path $bash)) {
-            throw "Git Bash not found next to git.exe: $bash"
-          }
-          & $bash ./scripts/publish-windows-x64.sh
-        working-directory: Avalonia
-
-      - name: Package Avalonia Windows app
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
+          & .\scripts\publish-windows-msix.ps1 -Version "${{ needs.prepare.outputs.package_version }}" -RuntimeIdentifier "win-x64"
         working-directory: Avalonia
 
       - name: Upload Avalonia Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-windows
-          path: Avalonia/release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
+          path: |
+            Avalonia/publish/msix/win-x64/GitRunnerManager-${{ needs.prepare.outputs.package_version }}.0-win-x64.msix
+            Avalonia/publish/msix/win-x64/certificate/GitRunnerManager-Sideload.cer
+            Avalonia/publish/msix/win-x64/RELEASE_NOTES.md
           if-no-files-found: error
 
   build-avalonia-windows-arm64:
@@ -464,6 +453,8 @@ jobs:
             This release is no longer macOS-only: download the native macOS DMG installer or the Avalonia multiplatform builds from the assets below.
 
             The native macOS app is packaged as a drag-to-Applications installer. The Avalonia builds are published for Windows x64, Windows ARM64, Linux x64, Linux ARM64, and macOS arm64.
+
+            Windows x64 is distributed as an MSIX sideload package. Install the bundled `GitRunnerManager-Sideload.cer` certificate into `Current User -> Trusted People` before opening the `.msix` package.
 
             Note: these builds are ad-hoc signed or unsigned. macOS may ask for confirmation the first time an app is opened.
 
