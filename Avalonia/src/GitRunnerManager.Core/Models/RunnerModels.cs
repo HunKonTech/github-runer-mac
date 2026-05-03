@@ -361,6 +361,8 @@ public class GitHubRunnerSetupResult
 
 public enum RunnerStatusKind
 {
+    Starting,
+    Stopping,
     Running,
     Waiting,
     Busy,
@@ -412,6 +414,8 @@ public class NetworkConditionSnapshot
 
 public enum RunnerActivityKind
 {
+    Starting,
+    Stopping,
     Busy,
     Waiting,
     Unknown
@@ -468,6 +472,8 @@ public class RunnerInstanceSnapshot
 
             return Runner.Activity.Kind switch
             {
+                RunnerActivityKind.Starting => RunnerStatusKind.Starting,
+                RunnerActivityKind.Stopping => RunnerStatusKind.Stopping,
                 RunnerActivityKind.Busy => RunnerStatusKind.Busy,
                 RunnerActivityKind.Waiting => RunnerStatusKind.Waiting,
                 _ => RunnerStatusKind.Running

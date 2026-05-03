@@ -197,7 +197,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     public Task ForceStartAsync()
     {
-        return SetControlModeAsync(RunnerControlMode.ForceRunning, "manual start");
+        return RunManualActionAsync(RunnerControlMode.ForceRunning, () => _runnerManager.StartAllAsync());
     }
 
     public void ForceStop()
@@ -207,7 +207,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     public Task ForceStopAsync()
     {
-        return SetControlModeAsync(RunnerControlMode.ForceStopped, "manual stop");
+        return RunManualActionAsync(RunnerControlMode.ForceStopped, () => _runnerManager.StopAllAsync());
     }
 
     public async Task StartAllAsync()
@@ -283,6 +283,27 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         ControlMode = mode;
         _preferencesFactory.Create().ControlMode = mode;
         await ReconcileStateAsync(trigger);
+    }
+
+    private async Task RunManualActionAsync(RunnerControlMode mode, Func<Task> action)
+    {
+        await _reconcileLock.WaitAsync();
+        try
+        {
+            ControlMode = mode;
+            _preferencesFactory.Create().ControlMode = mode;
+            await action();
+            UpdateAggregateSnapshot();
+            LastErrorMessage = Runners.Select(runner => runner.LastErrorMessage).FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
+        }
+        catch (Exception ex)
+        {
+            LastErrorMessage = _localization.Get(LocalizationKeys.ErrorRunnerHandling, ex.Message);
+        }
+        finally
+        {
+            _reconcileLock.Release();
+        }
     }
 
     private async Task ReconcileStateAsync(string trigger)

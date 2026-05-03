@@ -94,6 +94,63 @@ public class RunnerManagerTests
     }
 
     [Fact]
+    public async Task RefreshAll_GlobalManualStartOverridesBatteryStopRule()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig { Id = "one", DisplayName = "One", RunnerDirectory = "/tmp/one", StopOnBattery = true },
+                new RunnerConfig { Id = "two", DisplayName = "Two", RunnerDirectory = "/tmp/two", StopOnBattery = true }
+            ]
+        };
+        var controllerFactory = new FakeControllerFactory();
+        var manager = new RunnerManager(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService());
+
+        await manager.RefreshAllAsync(
+            new NetworkConditionSnapshot { Kind = NetworkConditionKind.Unmetered, Description = "unmetered" },
+            new BatterySnapshot { HasBattery = true, IsOnBattery = true },
+            RunnerControlMode.ForceRunning);
+
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/one"].StartCount);
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/two"].StartCount);
+        Assert.Equal(0, controllerFactory.Controllers["/tmp/one"].StopCount);
+        Assert.Equal(0, controllerFactory.Controllers["/tmp/two"].StopCount);
+    }
+
+    [Fact]
+    public async Task ForceStartAsync_StartsEnabledRunnersWhenPreviousModeWasStopped()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            ControlMode = RunnerControlMode.ForceStopped,
+            RunnerProfiles =
+            [
+                new RunnerConfig { Id = "one", DisplayName = "One", RunnerDirectory = "/tmp/one" },
+                new RunnerConfig { Id = "two", DisplayName = "Two", RunnerDirectory = "/tmp/two" }
+            ]
+        };
+        var controllerFactory = new FakeControllerFactory();
+        using var store = new RunnerTrayStore(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService(),
+            new FakeNetworkMonitor(),
+            new FakeBatteryMonitorFactory());
+
+        await store.ForceStartAsync();
+
+        Assert.Equal(RunnerControlMode.ForceRunning, store.ControlMode);
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/one"].StartCount);
+        Assert.Equal(1, controllerFactory.Controllers["/tmp/two"].StartCount);
+    }
+
+    [Fact]
     public void RunnerUpdateDecision_ComparesSemanticVersions()
     {
         Assert.True(RunnerUpdateDecision.IsUpdateAvailable("2.300.0", "2.301.0"));

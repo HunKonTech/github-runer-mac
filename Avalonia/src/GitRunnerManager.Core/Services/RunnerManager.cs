@@ -99,20 +99,19 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
         BatterySnapshot battery,
         RunnerControlMode controlMode)
     {
-        foreach (var runner in _runners)
-            await runner.ReconcileAsync(network, battery, controlMode);
+        await Task.WhenAll(_runners.Select(runner => runner.ReconcileAsync(network, battery, controlMode)));
     }
 
     public async Task StartAllAsync()
     {
-        foreach (var runner in _runners.Where(runner => runner.Profile.IsEnabled))
-            await runner.StartAsync();
+        await Task.WhenAll(_runners
+            .Where(runner => runner.Profile.IsEnabled)
+            .Select(runner => runner.StartAsync()));
     }
 
     public async Task StopAllAsync()
     {
-        foreach (var runner in _runners)
-            await runner.StopAsync();
+        await Task.WhenAll(_runners.Select(runner => runner.StopAsync()));
     }
 
     private void OnRunnerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

@@ -1244,6 +1244,8 @@ public sealed class SettingsWindow : Window
     {
         return runner.Snapshot.StatusKind switch
         {
+            RunnerStatusKind.Starting => T(LocalizationKeys.ActivityWaitingOrStarting),
+            RunnerStatusKind.Stopping => T(LocalizationKeys.ActivityStopping),
             RunnerStatusKind.Busy => T(LocalizationKeys.RunnerStatusBusy),
             RunnerStatusKind.Waiting => T(LocalizationKeys.RunnerStatusWaiting),
             RunnerStatusKind.Error => T(LocalizationKeys.RunnerStatusError),

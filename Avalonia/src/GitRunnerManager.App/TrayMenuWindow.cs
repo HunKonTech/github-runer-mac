@@ -495,6 +495,8 @@ public sealed class TrayMenuWindow : Window
     {
         return runner.Snapshot.StatusKind switch
         {
+            RunnerStatusKind.Starting => T(LocalizationKeys.ActivityWaitingOrStarting),
+            RunnerStatusKind.Stopping => T(LocalizationKeys.ActivityStopping),
             RunnerStatusKind.Busy => T(LocalizationKeys.RunnerStatusBusy),
             RunnerStatusKind.Waiting => T(LocalizationKeys.RunnerStatusWaiting),
             RunnerStatusKind.Error => T(LocalizationKeys.RunnerStatusError),
@@ -533,6 +535,8 @@ public sealed class TrayMenuWindow : Window
     {
         return runner.Snapshot.StatusKind switch
         {
+            RunnerStatusKind.Starting => OrangeBrush,
+            RunnerStatusKind.Stopping => OrangeBrush,
             RunnerStatusKind.Busy => OrangeBrush,
             RunnerStatusKind.Waiting => GreenBrush,
             RunnerStatusKind.Running => GreenBrush,
