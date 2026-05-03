@@ -40,8 +40,7 @@ public static class GitHubJobMatcher
         var candidates = new[]
         {
             runner.DisplayName,
-            Directory.Exists(runner.RunnerDirectory) ? ReadRunnerName(runner.RunnerDirectory) : null,
-            Environment.MachineName
+            Directory.Exists(runner.RunnerDirectory) ? ReadRunnerName(runner.RunnerDirectory) : null
         };
 
         return candidates

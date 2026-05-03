@@ -103,6 +103,24 @@ public class ResourceMonitorTests
         Assert.Equal(50, two.TotalCpuPercent);
     }
 
+    [Fact]
+    public void Aggregate_IgnoresRunnerProcessesFromOtherDirectories()
+    {
+        var processes = new[]
+        {
+            Process(100, 1, "Runner.Listener", "/Users/test/runner-one/bin/Runner.Listener", 2, 50),
+            Process(101, 100, "Runner.Worker", "/Users/test/runner-one/bin/Runner.Worker", 3, 100),
+            Process(200, 1, "Runner.Listener", "/Users/test/runner-two/bin/Runner.Listener", 20, 500),
+            Process(201, 200, "Runner.Worker", "/Users/test/runner-two/bin/Runner.Worker", 30, 600)
+        };
+
+        var usage = ProcessTreeResourceAggregator.Aggregate(processes, "/Users/test/runner-three");
+
+        Assert.False(usage.IsRunning);
+        Assert.False(usage.IsJobActive);
+        Assert.Equal(0, usage.ProcessCount);
+    }
+
     private static ProcessResourceInfo Process(int pid, int parentPid, string name, string commandLine, double cpuPercent, long memoryMb)
     {
         return new ProcessResourceInfo

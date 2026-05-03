@@ -192,8 +192,8 @@ public class RunnerController : IRunnerController
             var cmd = proc.ProcessName;
             var path = _runnerDirectory.FullName;
             var commandLine = GetCommandLine(proc);
-            if (!string.IsNullOrWhiteSpace(commandLine)
-                && !commandLine.Contains(path, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(commandLine)
+                || !commandLine.Contains(path, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             if (cmd == "run" || cmd == "run.sh" || cmd == "run.cmd" || cmd == "run.bat")

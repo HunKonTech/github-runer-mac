@@ -85,6 +85,38 @@ public class RunnerManagerTests
         Assert.True(stopwatch.ElapsedMilliseconds < 200);
         Assert.True(await controllerFactory.WaitForStopAsync(TimeSpan.FromSeconds(2)));
     }
+
+    [Fact]
+    public async Task RefreshAll_DefersAutomaticStopWhileJobIsActive()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig
+                {
+                    Id = "one",
+                    DisplayName = "One",
+                    RunnerDirectory = "/tmp/one",
+                    StopOnMeteredNetwork = true
+                }
+            ]
+        };
+        var controllerFactory = new BusyControllerFactory();
+        var manager = new RunnerManager(
+            controllerFactory,
+            new ActiveJobResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService());
+
+        await manager.RefreshAllAsync(
+            new NetworkConditionSnapshot { Kind = NetworkConditionKind.Expensive, Description = "metered" },
+            BatterySnapshot.NoBattery,
+            RunnerControlMode.Automatic);
+
+        Assert.Equal(0, controllerFactory.Controller.StopCount);
+        Assert.True(controllerFactory.Controller.IsRunning);
+    }
 }
 
 internal sealed class FakePreferencesStoreFactory(InMemoryPreferencesStore store) : IPreferencesStoreFactory
@@ -237,6 +269,71 @@ internal sealed class SlowStopController(TaskCompletionSource stopStarted) : IRu
     }
 
     public void Dispose()
+    {
+    }
+}
+
+internal sealed class BusyControllerFactory : IRunnerControllerFactory
+{
+    public BusyController Controller { get; } = new();
+
+    public IRunnerController Create(DirectoryInfo runnerDirectory) => Controller;
+}
+
+internal sealed class BusyController : IRunnerController
+{
+    public int StopCount { get; private set; }
+    public bool IsRunning { get; private set; } = true;
+
+    public RunnerSnapshot GetCurrentSnapshot()
+    {
+        return new RunnerSnapshot
+        {
+            IsRunning = IsRunning,
+            Activity = new RunnerActivitySnapshot
+            {
+                Kind = RunnerActivityKind.Busy,
+                Description = "Working",
+                CurrentJobName = "build"
+            }
+        };
+    }
+
+    public Task StartAsync()
+    {
+        IsRunning = true;
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync()
+    {
+        StopCount++;
+        IsRunning = false;
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+internal sealed class ActiveJobResourceMonitorFactory : IResourceMonitorFactory
+{
+    public IResourceMonitor Create(DirectoryInfo runnerDirectory) => new ActiveJobResourceMonitor();
+}
+
+internal sealed class ActiveJobResourceMonitor : IResourceMonitor
+{
+    public RunnerResourceUsage GetCurrentUsage()
+    {
+        return new RunnerResourceUsage
+        {
+            IsRunning = true,
+            IsJobActive = true
+        };
+    }
+
+    public void Stop()
     {
     }
 }

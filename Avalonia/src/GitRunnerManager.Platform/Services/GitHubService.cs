@@ -16,12 +16,14 @@ public class GitHubService : IGitHubService, IGitHubAuthService
     private readonly ICredentialStore _credentialStore;
     private readonly HttpClient _httpClient;
 
-    public GitHubService(ICredentialStore credentialStore)
+    public GitHubService(ICredentialStore credentialStore, HttpClient? httpClient = null)
     {
         _credentialStore = credentialStore;
-        _httpClient = new HttpClient();
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("GitRunnerManager");
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        _httpClient = httpClient ?? new HttpClient();
+        if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("GitRunnerManager");
+        if (!_httpClient.DefaultRequestHeaders.Accept.Any())
+            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
     public async Task<GitHubDeviceFlowStart> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default)
@@ -138,16 +140,43 @@ public class GitHubService : IGitHubService, IGitHubAuthService
 
     private async Task<GitHubAccountInfo> GetAccountInfoAsync(CancellationToken cancellationToken = default)
     {
+        var candidates = new List<string>();
         var token = await _credentialStore.GetGitHubTokenAsync();
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
-            token = accounts.FirstOrDefault()?.Token;
-        }
-        if (string.IsNullOrWhiteSpace(token))
+        if (!string.IsNullOrWhiteSpace(token))
+            candidates.Add(token);
+
+        var accounts = await ((IGitHubTokenStore)_credentialStore).GetAccountsAsync();
+        candidates.AddRange(accounts.Select(account => account.Token));
+        candidates = candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Distinct()
+            .ToList();
+
+        if (candidates.Count == 0)
             return new GitHubAccountInfo { IsSignedIn = false };
 
-        return await GetAccountInfoAsync(token, cancellationToken);
+        GitHubAccountInfo? lastFailure = null;
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var account = await GetAccountInfoAsync(candidate, cancellationToken);
+                if (account.IsSignedIn)
+                    return account;
+
+                lastFailure = account;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+            {
+                lastFailure = new GitHubAccountInfo { IsSignedIn = false, Error = ex.Message };
+            }
+        }
+
+        return lastFailure ?? new GitHubAccountInfo { IsSignedIn = false };
     }
 
     private async Task<GitHubAccountInfo> GetAccountInfoAsync(string token, CancellationToken cancellationToken = default)

@@ -23,6 +23,14 @@ public class GitHubJobMatcherTests
     }
 
     [Fact]
+    public void DoesNotMatchMachineNameWhenRunnerNameDiffers()
+    {
+        var runner = new RunnerConfig { DisplayName = "Runner one" };
+
+        Assert.False(GitHubJobMatcher.Matches(Environment.MachineName, runner));
+    }
+
+    [Fact]
     public void MatchesWorkflowJobToConfiguredRunner()
     {
         var job = new GitHubWorkflowJobInfo { RunnerName = "Local runner" };

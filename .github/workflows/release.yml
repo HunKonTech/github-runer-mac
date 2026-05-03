@@ -275,31 +275,18 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish Avalonia Windows app
+      - name: Package Avalonia Windows MSIX ZIP
         shell: powershell
         run: |
           $env:APP_VERSION = "${{ needs.prepare.outputs.package_version }}"
-          $git = (Get-Command git.exe -ErrorAction Stop).Source
-          $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
-          $bash = Join-Path $gitRoot "bin\bash.exe"
-          if (-not (Test-Path $bash)) {
-            throw "Git Bash not found next to git.exe: $bash"
-          }
-          & $bash ./scripts/publish-windows-x64.sh
-        working-directory: Avalonia
-
-      - name: Package Avalonia Windows app
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path publish/win-x64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip" -Force
+          ./scripts/publish-windows-msix.ps1 -RuntimeIdentifier win-x64 -Version "${{ needs.prepare.outputs.package_version }}"
         working-directory: Avalonia
 
       - name: Upload Avalonia Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-windows
-          path: Avalonia/release/GitRunnerManager-Avalonia-Windows-x64-${{ needs.prepare.outputs.package_version }}.zip
+          path: Avalonia/publish/msix/win-x64/GitRunnerManager-${{ needs.prepare.outputs.package_version }}-win-x64.zip
           if-no-files-found: error
 
   build-avalonia-windows-arm64:
@@ -322,31 +309,18 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish Avalonia Windows ARM64 app
+      - name: Package Avalonia Windows ARM64 MSIX ZIP
         shell: powershell
         run: |
           $env:APP_VERSION = "${{ needs.prepare.outputs.package_version }}"
-          $git = (Get-Command git.exe -ErrorAction Stop).Source
-          $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
-          $bash = Join-Path $gitRoot "bin\bash.exe"
-          if (-not (Test-Path $bash)) {
-            throw "Git Bash not found next to git.exe: $bash"
-          }
-          & $bash ./scripts/publish-windows-arm64.sh
-        working-directory: Avalonia
-
-      - name: Package Avalonia Windows ARM64 app
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path publish/win-arm64/* -DestinationPath "release/GitRunnerManager-Avalonia-Windows-arm64-${{ needs.prepare.outputs.package_version }}.zip" -Force
+          ./scripts/publish-windows-msix.ps1 -RuntimeIdentifier win-arm64 -Version "${{ needs.prepare.outputs.package_version }}"
         working-directory: Avalonia
 
       - name: Upload Avalonia Windows ARM64 artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-avalonia-windows-arm64
-          path: Avalonia/release/GitRunnerManager-Avalonia-Windows-arm64-${{ needs.prepare.outputs.package_version }}.zip
+          path: Avalonia/publish/msix/win-arm64/GitRunnerManager-${{ needs.prepare.outputs.package_version }}-win-arm64.zip
           if-no-files-found: error
 
   build-avalonia-linux:

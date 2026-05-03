@@ -151,10 +151,11 @@ public class AppUpdateService : IAppUpdateService
 
         if (OperatingSystem.IsWindows())
         {
-            if (name.EndsWith(".msixbundle", StringComparison.OrdinalIgnoreCase)) return 0;
-            if (name.EndsWith(".msix", StringComparison.OrdinalIgnoreCase)) return 1;
-            if (name.EndsWith(".appinstaller", StringComparison.OrdinalIgnoreCase)) return 2;
-            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (name.EndsWith(".msixbundle", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (name.EndsWith(".msix", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (name.EndsWith(".appinstaller", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return 4;
         }
 
         if (OperatingSystem.IsMacOS() && name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))

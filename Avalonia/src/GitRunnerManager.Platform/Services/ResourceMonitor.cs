@@ -407,7 +407,8 @@ public static class ProcessTreeResourceAggregator
 
     private static bool IsRunnerRootCandidate(ProcessResourceInfo process, string runnerDirectory)
     {
-        if (IsListenerProcess(process) || IsWorkerProcess(process) || string.Equals(process.Name, "RunnerService", StringComparison.OrdinalIgnoreCase))
+        if ((IsListenerProcess(process) || IsWorkerProcess(process) || string.Equals(process.Name, "RunnerService", StringComparison.OrdinalIgnoreCase))
+            && HasRunnerDirectory(process, runnerDirectory))
             return true;
 
         var commandLine = process.CommandLine ?? string.Empty;

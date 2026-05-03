@@ -71,6 +71,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
             if (_disposed)
                 return;
 
+            RefreshSnapshot();
             await ApplyDesiredStateAsync(network, battery, globalControlMode);
             RefreshSnapshot();
             LastErrorMessage = null;
@@ -140,6 +141,9 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
         if (Profile.StopOnBattery && !battery.CanRun)
         {
+            if (IsActiveJobRunning)
+                return;
+
             await _controller.StopAsync();
             return;
         }
@@ -170,10 +174,17 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
                 await _controller.StartAsync();
                 break;
             case NetworkDecision.Stop:
+                if (IsActiveJobRunning)
+                    return;
+
                 await _controller.StopAsync();
                 break;
         }
     }
+
+    private bool IsActiveJobRunning =>
+        RunnerSnapshot.Activity.Kind == RunnerActivityKind.Busy ||
+        ResourceUsage.IsJobActive;
 
     private async Task RunActionAsync(Func<Task> action)
     {

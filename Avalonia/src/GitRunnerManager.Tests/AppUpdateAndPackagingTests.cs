@@ -8,7 +8,7 @@ namespace GitRunnerManager.Tests;
 public class AppUpdateAndPackagingTests
 {
     [Fact]
-    public void FindPlatformAsset_OnWindows_PrefersMsixOverExe()
+    public void FindPlatformAsset_OnWindows_PrefersMsixZipOverMsix()
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -16,11 +16,12 @@ public class AppUpdateAndPackagingTests
         var asset = AppUpdateService.FindPlatformAsset(
         [
             new GitHubAsset { Name = "GitRunnerManager-win-x64.exe", BrowserDownloadUrl = "https://example.com/GitRunnerManager-win-x64.exe" },
-            new GitHubAsset { Name = "GitRunnerManager-win-x64.msix", BrowserDownloadUrl = "https://example.com/GitRunnerManager-win-x64.msix" }
+            new GitHubAsset { Name = "GitRunnerManager-win-x64.msix", BrowserDownloadUrl = "https://example.com/GitRunnerManager-win-x64.msix" },
+            new GitHubAsset { Name = "GitRunnerManager-win-x64.zip", BrowserDownloadUrl = "https://example.com/GitRunnerManager-win-x64.zip" }
         ]);
 
         Assert.NotNull(asset);
-        Assert.Equal("GitRunnerManager-win-x64.msix", asset!.Name);
+        Assert.Equal("GitRunnerManager-win-x64.zip", asset!.Name);
     }
 
     [Fact]
@@ -31,10 +32,10 @@ public class AppUpdateAndPackagingTests
             Version = "1.0.0",
             ReleasePageUrl = "https://example.com/release",
             DownloadUrl = "https://example.com/download",
-            AssetName = "GitRunnerManager-win-x64.msix"
+            AssetName = "GitRunnerManager-win-x64.zip"
         });
 
-        Assert.Equal(".msix", extension);
+        Assert.Equal(".zip", extension);
     }
 
     [Fact]
