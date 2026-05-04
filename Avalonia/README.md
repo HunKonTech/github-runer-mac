@@ -1,179 +1,219 @@
 # GitRunnerManager (Avalonia)
 
-## English
-
-**GitRunnerManager** is a cross-platform desktop application for managing a local GitHub Actions self-hosted runner. It provides system tray (Windows/Linux) or menu bar (macOS) integration for controlling the runner without opening Terminal.
-
-This is a cross-platform port of the original [GitRunnerManager](https://github.com/HunKonTech/GitRunnerManager) Swift app, rewritten in C# / .NET 9 with Avalonia UI.
-
-### Features
-
-- Tray/Menu bar icon showing runner status
-- Start/Stop/Automatic control modes
-- Activity monitoring (waiting for jobs, working on job)
-- Network condition detection (metered/unmetered/offline)
-- Battery monitoring with auto-pause on battery
-- Resource usage monitoring (CPU, memory)
-- Settings window with full configuration
-- Localization support (English, Hungarian)
-- Automatic updates via GitHub Releases
-
-### Supported Platforms
-
-- **Windows 10/11**: System tray icon (notification area)
-- **macOS 11+**: Menu bar icon
-- **Linux**: TrayIcon via AppIndicator (best on GNOME/KDE)
-
-> **Linux Note**: Tray support depends on the desktop environment. Most modern Linux distros with GNOME or KDE should work.
-
-### Runner Folder Configuration
-
-The app expects a GitHub Actions runner directory. Default paths:
-
-- macOS: `/Users/<user>/actions-runner`
-- Linux: `/home/<user>/actions-runner`
-- Windows: `C:\Users\<user>\GitHub\actions-runner`
-
-You can change this in Settings.
-
-### Build Commands
-
-```bash
-# Build for development
-cd Avalonia
-dotnet build
-
-# Build release
-dotnet build -c Release
-
-# Publish for macOS (arm64)
-APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
-
-# Publish for Windows (x64)
-APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
-
-# Publish for Linux (x64)
-APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
-```
-
-#### Install the published app
-
-After publishing, the app will be in `Avalonia/publish/`. Run the executable:
-- **macOS**: `Avalonia/publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
-- **Windows**: `Avalonia/publish/win-x64/publish/GitRunnerManager.exe`
-- **Linux**: `Avalonia/publish/linux-x64/publish/GitRunnerManager`
-
-### Screenshots
-
-![Top Menu](pictures/top_menu.png)
-![Settings Page](pictures/settings_page.png)
-
-### Technology Stack
-
-- .NET 9
-- Avalonia UI 11.x
-- CommunityToolkit.Mvvm
-- MVVM pattern with dependency injection
-
-### Launch at Login
-
-- **Windows**: Registry Run key
-- **macOS**: Unsupported in this version (use Login Items manually)
-- **Linux**: `.desktop` file in `~/.config/autostart`
-
-### Known Limitations
-
-- macOS menu bar: TrayIcon click event may not work on all macOS versions
-- Linux: Depends on desktop environment AppIndicator support
-- Battery monitoring on Linux requires sysfs access
-
 ## Magyar
 
-A **GitRunnerManager** egy multiplatform asztali alkalmazás helyi GitHub Actions self-hosted runner kezelésére. Rendszertálcás (Windows/Linux) vagy menüsoros (macOS) integrációt biztosít a runner vezérléséhez terminál nyitása nélkül.
-
-Ez az eredeti [GitRunnerManager](https://github.com/HunKonTech/GitRunnerManager) Swift alkalmazás cross-platform portja, C# / .NET 9 + Avalonia UI-val újraírva.
+A **GitRunnerManager Avalonia** egy Windows, macOS és Linux alatt futó asztali alkalmazás GitHub Actions self-hosted runnerek kezelésére. A Swift macOS app multiplatform változata C# / .NET 9 és Avalonia UI alapon.
 
 ### Funkciók
 
-- Tálca/menüsor ikon a runner állapotával
-- Indítás/Leállítás/Automatikus vezérlési módok
-- Aktivitásfigyelés (feladatokra vár, dolgozik)
-- Hálózati állapot detektálás (korlátos/korlátlan/offline)
-- Akkumulátor figyelés auto-szünettel akkumulátoron
-- Erőforrás-használat figyelés (CPU, memória)
-- Beállítások ablak teljes konfigurációval
-- Lokalizáció támogatás (Angol, Magyar)
-- Automatikus frissítések GitHub Releases-en keresztül
+- Rendszertálca vagy menüsor ikon runner állapottal
+- Több runner profil kezelése
+- Indítás, leállítás, újraindítás és automatikus mód
+- Összes runner indítása, leállítása és frissítése
+- Runner hozzáadása varázslóval
+- Meglévő runner mappa importálása
+- Repository és organization runner konfiguráció
+- Runner engedélyezés, automatikus indítás és automatikus mód profilonként
+- Akkumulátor és forgalomkorlátos hálózat alapján történő szüneteltetés
+- CPU-, memória-, folyamat- és aktív job figyelés
+- Runner log nézet, log mappa megnyitása
+- Runner frissítés egyenként vagy tömegesen
+- GitHub fiókok kezelése személyes és szervezeti hozzáféréssel
+- GitHub OAuth Device Flow és GitHub CLI token fallback
+- GitHub Actions irányítópult
+- Workflow futások, jobok, lépések és státuszok megjelenítése
+- Runner group és engedélyezett repositoryk megjelenítése, ha a jogosultság elérhető
+- Helyi runner aktivitás és GitHub job korreláció
+- Repository szűrő az Actions irányítópulton
+- Diagnosztikai kontextus másolása LLM-hez
+- Markdown és JSON export
+- Alkalmazásfrissítés GitHub Releases alapján
+- Stabil és preview frissítési csatorna
+- Automatikus frissítéskeresés
+- Magyar és angol lokalizáció
+- Fejlesztői diagnosztikai logok
 
-### Támogatott Platformok
+### Támogatott platformok
 
-- **Windows 10/11**: Rendszertálca ikon
-- **macOS 11+**: Menüsor ikon
-- **Linux**: TrayIcon AppIndicator-en keresztül (legjobb GNOME/KDE-n)
+- **Windows 10/11**: rendszertálca ikon
+- **macOS 11+**: menüsor ikon
+- **Linux**: AppIndicator alapú TrayIcon
 
-> **Linux Megjegyzés**: A tálca támogatás a desktop környezettől függ. A legtöbb modern Linux disztró GNOME-mal vagy KDE-vel működnie kell.
+Linuxon a tálca támogatása a desktop környezettől függ.
 
-### Runner Mappa Beállítás
+### Runner mappák
 
-Az alkalmazás egy GitHub Actions runner mappát vár. Alapértelmezett útvonalak:
+Alapértelmezett útvonalak:
 
 - macOS: `/Users/<felhasználó>/actions-runner`
 - Linux: `/home/<felhasználó>/actions-runner`
 - Windows: `C:\Users\<felhasználó>\GitHub\actions-runner`
 
-Módosítható a Beállításokban.
+A Runnerek beállítási oldalon több runner is hozzáadható, importálható vagy eltávolítható.
 
-### Build Parancsok
+### GitHub integráció
+
+Az Actions irányítópult GitHub hozzáféréssel tölti be a runner metaadatokat, workflow futásokat és job részleteket. Repository runnerhez repository Actions olvasási jogosultság kell. Organization runner group és hozzáférési adatokhoz organization admin jogosultság szükséges lehet.
+
+OAuth Device Flow használatához GitHub OAuth App Client ID szükséges. Ha nincs beállítva, az app megpróbálhat GitHub CLI tokent használni.
+
+### Build
 
 ```bash
-# Build fejlesztéshez
-cd Avalonia
 dotnet build
-
-# Build release
-dotnet build -c Release
-
-# Publish macOS-re (arm64)
-APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
-
-# Publish Windows-ra (x64)
-APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
-
-# Publish Linux-ra (x64)
-APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
 ```
 
-#### Telepítés
+Release build:
 
-A publisholás után az alkalmazás az `Avalonia/publish/` mappában lesz. Futtatás:
-- **macOS**: `Avalonia/publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
-- **Windows**: `Avalonia/publish/win-x64/publish/GitRunnerManager.exe`
-- **Linux**: `Avalonia/publish/linux-x64/publish/GitRunnerManager`
+```bash
+./scripts/build.sh
+```
 
-### Képernyőképek
+Publish:
 
-![Felső Menü](pictures/top_menu.png)
-![Beállítások Oldal](pictures/settings_page.png)
+```bash
+APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
+APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
+APP_VERSION=1.0.0 ./scripts/publish-windows-arm64.sh
+APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
+APP_VERSION=1.0.0 ./scripts/publish-linux-arm64.sh
+```
 
-### Tech Stack
+Windows MSIX:
+
+```powershell
+.\scripts\publish-windows-msix.ps1
+```
+
+A publikált appok a `publish/` mappába kerülnek.
+
+### Futtatás publish után
+
+- **macOS**: `publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
+- **Windows**: `publish/win-x64/publish/GitRunnerManager.exe`
+- **Linux**: `publish/linux-x64/publish/GitRunnerManager`
+
+### Tech stack
 
 - .NET 9
 - Avalonia UI 11.x
-- CommunityToolkit.Mvvm
-- MVVM pattern függőség injektálással
+- C#
+- Services / Stores / Models / Views
+- Platform-specifikus szolgáltatások
+- Unit tesztek: `src/GitRunnerManager.Tests`
 
-### Bejelentkezéskori Indítás
+### Bejelentkezéskori indítás
 
-- **Windows**: Registry Run kulcs
-- **macOS**: Nem támogatott ebben a verzióban (kézzel állítsd be a Login Items-ben)
-- **Linux**: `.desktop` fájl a `~/.config/autostart`-ban
+- **Windows**: Registry Run key
+- **macOS**: platformfüggő támogatás
+- **Linux**: `.desktop` fájl a `~/.config/autostart` mappában
 
-### Ismert Korlátozások
+## English
 
-- macOS menüsor: TrayIcon click esemény nem működhet minden macOS verzión
-- Linux: A desktop környezet AppIndicator támogatásától függ
-- Akkumulátor figyelés Linux-on sysfs hozzáférést igényel
+**GitRunnerManager Avalonia** is a Windows, macOS, and Linux desktop app for managing GitHub Actions self-hosted runners. It is the cross-platform C# / .NET 9 and Avalonia UI version of the Swift macOS app.
 
----
+### Features
+
+- Tray or menu bar status icon
+- Multiple runner profiles
+- Start, stop, restart, and automatic mode
+- Start, stop, and update all runners
+- Add runner wizard
+- Existing runner folder import
+- Repository and organization runner configuration
+- Per-runner enabled, auto-start, and automatic mode settings
+- Battery and metered-network based pausing
+- CPU, memory, process, and active job monitoring
+- Runner log viewer and log folder access
+- Individual and bulk runner updates
+- GitHub account management with personal and organization access
+- GitHub OAuth Device Flow and GitHub CLI token fallback
+- GitHub Actions dashboard
+- Workflow runs, jobs, steps, and statuses
+- Runner group and allowed repository display when permissions allow it
+- Local runner activity and GitHub job correlation
+- Repository filter in the Actions dashboard
+- Diagnostic context copy for LLMs
+- Markdown and JSON export
+- App updates via GitHub Releases
+- Stable and preview update channels
+- Automatic update checks
+- English and Hungarian localization
+- Developer diagnostic logs
+
+### Supported platforms
+
+- **Windows 10/11**: system tray icon
+- **macOS 11+**: menu bar icon
+- **Linux**: AppIndicator-based TrayIcon
+
+On Linux, tray support depends on the desktop environment.
+
+### Runner folders
+
+Default paths:
+
+- macOS: `/Users/<user>/actions-runner`
+- Linux: `/home/<user>/actions-runner`
+- Windows: `C:\Users\<user>\GitHub\actions-runner`
+
+Multiple runners can be added, imported, or removed from the Runners settings page.
+
+### GitHub integration
+
+The Actions dashboard uses GitHub access to load runner metadata, workflow runs, and job details. Repository runners need repository Actions read access. Organization runner groups and access metadata may require organization admin permissions.
+
+OAuth Device Flow requires a GitHub OAuth App Client ID. If it is not configured, the app can try to use a GitHub CLI token.
+
+### Build
+
+```bash
+dotnet build
+```
+
+Release build:
+
+```bash
+./scripts/build.sh
+```
+
+Publish:
+
+```bash
+APP_VERSION=1.0.0 ./scripts/publish-macos-arm64.sh
+APP_VERSION=1.0.0 ./scripts/publish-windows-x64.sh
+APP_VERSION=1.0.0 ./scripts/publish-windows-arm64.sh
+APP_VERSION=1.0.0 ./scripts/publish-linux-x64.sh
+APP_VERSION=1.0.0 ./scripts/publish-linux-arm64.sh
+```
+
+Windows MSIX:
+
+```powershell
+.\scripts\publish-windows-msix.ps1
+```
+
+Published apps are written to `publish/`.
+
+### Run after publish
+
+- **macOS**: `publish/osx-arm64/publish/GitRunnerManager.app/Contents/MacOS/GitRunnerManager`
+- **Windows**: `publish/win-x64/publish/GitRunnerManager.exe`
+- **Linux**: `publish/linux-x64/publish/GitRunnerManager`
+
+### Technology stack
+
+- .NET 9
+- Avalonia UI 11.x
+- C#
+- Services / Stores / Models / Views
+- Platform-specific services
+- Unit tests: `src/GitRunnerManager.Tests`
+
+### Launch at login
+
+- **Windows**: Registry Run key
+- **macOS**: platform-dependent support
+- **Linux**: `.desktop` file in `~/.config/autostart`
 
 Licenc: MIT
