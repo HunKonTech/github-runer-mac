@@ -181,7 +181,7 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          dotnet test Avalonia/GitRunnerManager.sln \
+          dotnet test Avalonia/src/GitRunnerManager.Tests/GitRunnerManager.Tests.csproj \
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory TestResults
 
