@@ -2,7 +2,7 @@
 
 ## Overview
 
-A lightweight menu bar / tray application for managing a local GitHub Actions self-hosted runner. It shows the runner status, current activity, network condition, and launch-at-login state, and lets you start, stop, or switch back to automatic mode directly from the menu.
+A lightweight menu bar / tray application for managing local GitHub Actions self-hosted runners. It shows runner status, current activity, network condition, battery/resource usage, launch-at-login state, and GitHub Actions context. It lets you start, stop, restart, switch automatic mode, add runner profiles, set up new GitHub runners, inspect workflow runs, and export diagnostics directly from the app.
 
 The repository contains **two separate implementations** of the same product:
 
@@ -11,7 +11,7 @@ The repository contains **two separate implementations** of the same product:
 | **SwiftUI** (native) | Swift 6.0, SwiftUI, Apple frameworks | macOS 14.0+ only |
 | **Avalonia** (cross-platform) | C# .NET 10, Avalonia UI | macOS, Windows, Linux |
 
-Both implementations share the same domain model and reconciliation logic but differ in architecture, UI framework, and platform integration.
+Both implementations share the same product direction and reconciliation logic but differ in architecture, UI framework, platform integration, and current feature completeness. The Avalonia implementation is the broader cross-platform branch with multi-runner management and GitHub Actions integration.
 
 ---
 
@@ -347,6 +347,13 @@ Avalonia/
     │   ├── Models/RunnerModels.cs
     │   └── Services/
     │       ├── LocalizationService.cs
+    │       ├── DiagnosticLog.cs
+    │       ├── GitHubActionsDiagnosticExporter.cs
+    │       ├── GitHubJobMatcher.cs
+    │       ├── GitHubPermissionEvaluator.cs
+    │       ├── RunnerInstanceStore.cs
+    │       ├── RunnerManager.cs
+    │       ├── RunnerSetupValidator.cs
     │       ├── RunnerLogParser.cs
     │       └── RunnerTrayStore.cs
     │
@@ -356,16 +363,26 @@ Avalonia/
     │   └── Services/
     │       ├── AppUpdateService.cs
     │       ├── BatteryMonitor.cs
+    │       ├── CredentialStore.cs
+    │       ├── GitHubActionsApiClient.cs
+    │       ├── GitHubService.cs
     │       ├── LaunchAtLoginService.cs
     │       ├── NetworkConditionMonitor.cs
     │       ├── PreferencesStore.cs
     │       ├── ResourceMonitor.cs
+    │       ├── RunnerFolderValidator.cs
+    │       ├── RunnerLogService.cs
+    │       ├── RunnerUpdateService.cs
     │       └── RunnerController.cs
     │
     ├── GitRunnerManager.App/         # Main UI application
     │   ├── GitRunnerManager.App.csproj
     │   ├── Program.cs
     │   ├── App.axaml / App.axaml.cs
+    │   ├── ActionsDashboardWindow.cs
+    │   ├── ActionsDashboardViewModel.cs
+    │   ├── AddRunnerWizardWindow.cs
+    │   ├── InitializingTrayWindow.cs
     │   ├── MainWindow.cs
     │   ├── TrayMenuWindow.cs
     │   ├── SettingsWindow.cs
@@ -383,6 +400,14 @@ Avalonia/
     └── GitRunnerManager.Tests/       # Unit tests (xUnit)
         ├── GitRunnerManager.Tests.csproj
         ├── PreferencesStoreTests.cs
+        ├── DiagnosticLogTests.cs
+        ├── GitHubActionsDiagnosticTests.cs
+        ├── GitHubJobMatcherTests.cs
+        ├── GitHubServiceTests.cs
+        ├── RunnerControllerTests.cs
+        ├── RunnerFolderAndLogServiceTests.cs
+        ├── RunnerManagerTests.cs
+        ├── RunnerSetupWizardTests.cs
         ├── ResourceMonitorTests.cs
         └── RunnerLogParserTests.cs
 ```
@@ -441,6 +466,17 @@ GitRunnerManager.App
 
 ## Core Functionality
 
+### 0. Multi-Runner Management (`RunnerManager.cs`, `RunnerInstanceStore.cs`)
+
+| Aspect | Detail |
+|--------|--------|
+| Profiles | Multiple `RunnerConfig` profiles persisted in preferences |
+| Per-runner state | Dedicated controller, resource monitor, snapshot, refresh time, error state |
+| Bulk actions | Start all, stop all, refresh/reconcile all |
+| Profile actions | Add, save, remove, reload profiles |
+| Per-runner policy | Enable/disable, auto-start, automatic mode, stop on battery, stop on metered network |
+| Job safety | Battery/metered stops are skipped while a job is active |
+
 ### 1. Runner Process Control (`RunnerController.cs`)
 
 | Aspect | Detail |
@@ -450,6 +486,14 @@ GitRunnerManager.App
 | Detection | Matches process names: `Runner.Listener`, `Runner.Worker`, `run`, `run-helper` |
 | Environment | `RUNNER_MANUALLY_TRAP_SIG=1` |
 | Cross-platform | Detects Windows vs Unix executable paths |
+
+### 1.1 Runner Folder and Log Services
+
+| Service | Purpose |
+|---------|---------|
+| `RunnerFolderValidator` | Validates imported or new runner folders |
+| `RunnerLogService` | Reads active/latest runner logs, truncates large logs, opens log folder |
+| `RunnerSetupValidator` | Validates setup drafts, suggested runner name, normalized labels |
 
 ### 2. Activity Monitoring (`RunnerLogParser.cs`)
 
@@ -537,12 +581,14 @@ Exposes: `HasBattery`, `IsOnBattery`, `IsCharging`, `CanRun`.
 | Preference | Default |
 |------------|---------|
 | `Language` | `System` |
+| `GitHubOAuthClientId` | `Ov23liuWbzhLR0LpcXwv` |
 | `RunnerDirectory` | Platform default |
+| `RunnerProfiles` | `[]` |
 | `ControlMode` | `Automatic` |
 | `AutomaticUpdateCheckEnabled` | `false` |
 | `UpdateChannel` | `Stable` |
 | `StopRunnerOnBattery` | `false` |
-| `StopRunnerOnMeteredNetwork` | `false` |
+| `StopRunnerOnMeteredNetwork` | `true` |
 
 Persisted as JSON to platform-specific location:
 
@@ -561,7 +607,44 @@ Persisted as JSON to platform-specific location:
 | Asset matching | Platform-specific (win-x64, osx-arm64, linux-x64) |
 | Download | HTTP download + open installer |
 
-### 9. Launch at Login (`LaunchAtLoginService.cs`)
+### 9. GitHub Account, Actions, and Diagnostics
+
+| Feature | Detail |
+|---------|--------|
+| Auth | GitHub device flow with configurable OAuth Client ID |
+| Token import | Reads `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` |
+| Storage | Credential store supports legacy token plus multiple stored accounts |
+| Permissions | Evaluates repo/org runner scopes and workflow access |
+| Repositories | Lists user and organization repositories |
+| Runners | Lists repository and organization self-hosted runners |
+| Workflow runs | Shows recent workflow runs and jobs |
+| Correlation | Matches GitHub jobs to local runners by runner name, local log job name, activity, and timing |
+| Exports | JSON and Markdown/LLM prompt diagnostic context |
+| Logs | Includes relevant local runner log lines in diagnostics |
+
+### 10. Add Runner Wizard
+
+Five-step Avalonia wizard:
+
+1. Scope: personal/repository or organization runner
+2. Repository access: all repositories or selected repositories
+3. Details: runner name and labels
+4. Folder: create new runner folder or import existing folder
+5. Review: validate and configure runner
+
+Creates registration tokens through GitHub API, downloads/configures GitHub Actions runner files, creates one or more local runner profiles, and supports organization selected-repository setups.
+
+### 11. Runner Update Service (`RunnerUpdateService.cs`)
+
+| Aspect | Detail |
+|--------|--------|
+| API | `GET /repos/actions/runner/releases/latest` |
+| Version detection | Runs `bin/Runner.Listener --version` |
+| Asset selection | Current OS/architecture runner package |
+| Install | Downloads, extracts, preserves `.runner` / `.credentials*`, replaces binaries |
+| Progress | Reports per-runner update progress |
+
+### 12. Launch at Login (`LaunchAtLoginService.cs`)
 
 | Platform | Method |
 |----------|--------|
@@ -574,21 +657,37 @@ Status enum: `Enabled`, `RequiresApproval`, `Disabled`, `Unavailable`, `Unknown`
 
 ```csharp
 enum RunnerControlMode { Automatic, ForceRunning, ForceStopped }
+class RunnerConfig { Id, DisplayName, RunnerDirectory, GitHubOwnerOrOrg, RepositoryName, IsOrganizationRunner, Labels, AutoStartEnabled, AutomaticModeEnabled, StopOnBattery, StopOnMeteredNetwork, UpdateAutomatically, IsEnabled }
 enum NetworkConditionKind { Offline, Expensive, Unmetered, Unknown }
 enum NetworkDecision { Run, Stop, Keep }
-enum RunnerActivityKind { Busy, Waiting, Unknown }
+enum RunnerActivityKind { Starting, Stopping, Busy, Waiting, Unknown }
+enum RunnerStatusKind { Starting, Stopping, Running, Waiting, Busy, Stopped, Error }
 enum AppLanguage { System, Hungarian, English }
 enum UpdateChannel { Stable, Preview }
 enum LaunchAtLoginStatus { Enabled, RequiresApproval, Disabled, Unavailable, Unknown }
+enum GitHubRunnerScope { Repository, Organization }
+enum RunnerRepositoryAccessMode { AllRepositories, SelectedRepositories }
+enum RunnerFolderSetupMode { CreateNew, ImportExisting }
+enum GitHubCorrelationConfidence { Exact, Probable, Possible, Unknown }
 
 class NetworkConditionSnapshot { Kind, Description, AutomaticDecision }
-class RunnerActivitySnapshot { Kind, Description }
+class RunnerActivitySnapshot { Kind, Description, CurrentJobName }
 class RunnerSnapshot { IsRunning, Activity }
-class RunnerResourceSnapshot { CpuPercent, MemoryMB, ProcessCount }
+class RunnerInstanceSnapshot { Profile, Runner, ResourceUsage, LastErrorMessage, LastRefreshTime, StatusKind }
+class RunnerResourceSnapshot { ParentProcessId, TotalCpuPercent, TotalMemoryBytes, ProcessCount, Processes, Timestamp, Error, Warning }
 class RunnerResourceUsage { IsRunning, IsJobActive, CpuPercent, MemoryMB }
 class ProcessResourceInfo { Pid, Ppid, CpuPercent, MemoryKB, Name, Args }
 class BatterySnapshot { IsOnBattery, IsCharging, HasBattery, CanRun }
 class AppUpdateInfo { Version, ReleasePageUrl, DownloadUrl, PublishedAt }
+class RunnerUpdateCheckResult { Profile, InstalledVersion, LatestVersion, DownloadUrl, IsUpdateAvailable, StatusMessage }
+class RunnerUpdateProgress { RunnerId, Message, Percent }
+class GitHubAccountInfo { IsSignedIn, Login, Name, AvatarUrl, HtmlUrl, Error, OAuthScopes }
+class GitHubAccountConnection { Id, Kind, Login, Organization, DisplayName }
+class GitHubRepositoryInfo { Owner, Name, FullName, HtmlUrl, ActionsEnabled }
+class GitHubRunnerInfo { Id, Name, Status, Busy, IsLocalRunnerBusy, Labels, Owner, Repository, Group, PermissionMessage }
+class GitHubWorkflowRunInfo { Id, RepositoryFullName, WorkflowName, RunNumber, Branch, Status, Conclusion, Actor, HtmlUrl, IsRunningOnThisRunner, CorrelationConfidence }
+class GitHubWorkflowJobInfo { Id, Name, Status, Conclusion, RunnerName, RunnerGroupName, Labels, Steps, IsRunningOnThisRunner, CorrelationConfidence }
+class GitHubActionsDiagnosticContext { Account, Run, Jobs, CurrentJob, LocalRunner, LocalRunnerStatus, ResourceUsage, LastRelevantRunnerLogLines, PermissionStatus }
 class PreferenceDefaults { ... }
 ```
 
@@ -599,6 +698,8 @@ class PreferenceDefaults { ... }
 | `IRunnerController` | Start/stop runner, get snapshot |
 | `IRunnerControllerFactory` | Creates `IRunnerController` |
 | `IRunnerLogParser` | Parse runner logs |
+| `IRunnerFolderValidator` | Validate runner folders and setup target folders |
+| `IRunnerLogService` | Read and open runner log directories |
 | `IResourceMonitor` | Get CPU/memory, stop monitoring |
 | `IResourceMonitorFactory` | Creates `IResourceMonitor` |
 | `INetworkConditionMonitor` | Network state change events |
@@ -607,6 +708,13 @@ class PreferenceDefaults { ... }
 | `IPreferencesStore` | Read/write preferences |
 | `IPreferencesStoreFactory` | Creates `IPreferencesStore` |
 | `IAppUpdateService` | Check updates, download installer |
+| `ICredentialStore` | Persist legacy GitHub token |
+| `IGitHubTokenStore` | Persist multiple GitHub account tokens |
+| `IGitHubAuthService` | GitHub device flow, token import, account list, sign-out |
+| `IGitHubActionsService` | GitHub Actions dashboard, runs, jobs |
+| `IGitHubService` | GitHub auth, repository listing, registration tokens, runner setup |
+| `IRunnerManager` | Manage multiple local runner profiles and instances |
+| `IRunnerUpdateService` | Check and install GitHub runner binary updates |
 | `ILaunchAtLoginService` | Get/set launch-at-login |
 | `ILaunchAtLoginServiceFactory` | Creates `ILaunchAtLoginService` |
 | `IClock` | Time abstraction |
@@ -619,6 +727,7 @@ class PreferenceDefaults { ... }
 ```
 TrayMenuWindow (390px wide, dark theme #171717)
 ├── App name + policy summary
+├── Runner profile list / selected runner context
 ├── StatusRow — Runner (green/red)
 ├── StatusRow — Activity (orange/gray)
 ├── StatusRow — Network (green/orange/red)
@@ -626,6 +735,7 @@ TrayMenuWindow (390px wide, dark theme #171717)
 ├── Advanced section — CPU, Memory, Job Active
 ├── Error message (if present)
 ├── Buttons: Start / Stop / Automatic / Refresh
+├── Runner actions: Restart, add runner, open Actions dashboard
 ├── Toggle: Launch at Login
 ├── Button: Settings
 └── Button: Quit
@@ -640,12 +750,44 @@ TrayMenuWindow (390px wide, dark theme #171717)
 ```
 SettingsWindow (with sidebar navigation)
 ├── General — Language picker, Launch at Login, Stop on Battery
-├── Runner — Status, folder path (with picker), Start/Stop/Refresh
+├── Runner — Profile list, folder path, per-runner policy, Start/Stop/Restart/Refresh
+├── GitHub — OAuth Client ID, sign in/import token, connected accounts, sign out
 ├── Updates — Version, auto-check toggle, channel picker, Check/Install
 ├── Network — Current state, policy, override info
 ├── Advanced — Process info, CPU%, Memory, Job active
 └── About — App name, version, license, GitHub/X/Repository links
 ```
+
+### Actions Dashboard (`ActionsDashboardWindow.cs`)
+
+```
+ActionsDashboardWindow (3-column dashboard)
+├── Account and permission status
+├── Local/GitHub runners with labels, scope, group, repository access
+├── Workflow runs with repository filter and local-runner correlation
+└── Job detail with steps, browser links, JSON export, Markdown/LLM export
+```
+
+- Realtime polling while open
+- Uses stored GitHub accounts and permissions
+- Merges local runner state with GitHub runner data
+- Exports diagnostic context to clipboard or files
+
+### Add Runner Wizard (`AddRunnerWizardWindow.cs`)
+
+```
+AddRunnerWizardWindow (5 steps)
+├── GitHub scope
+├── Repository access
+├── Runner details
+├── Folder setup
+└── Review and configure
+```
+
+- Uses GitHub account, organization, and repository APIs
+- Supports repository and organization runners
+- Supports all-repository and selected-repository organization runners
+- Supports creating new runner folders or importing existing folders
 
 ### About Window (`AboutWindow.cs`)
 
@@ -663,6 +805,11 @@ Simple dialog with version and author info.
 
 | Feature | Platform | Implementation |
 |---------|----------|----------------|
+| GitHub auth | All | Device flow, env/CLI token import |
+| GitHub API | All | REST API with stored credentials |
+| Credentials | All | Platform credential store abstraction |
+| Runner setup | All | Registration token + local runner configuration |
+| Runner updates | All | GitHub `actions/runner` release download |
 | Launch at Login | macOS | LaunchAgents plist |
 | Launch at Login | Windows | Registry Run key |
 | Battery | Windows | WMI `Win32_Battery` |
@@ -681,6 +828,14 @@ Simple dialog with version and author info.
 | Test File | Coverage |
 |-----------|----------|
 | `PreferencesStoreTests.cs` | Preference persistence, defaults, round-trip |
+| `DiagnosticLogTests.cs` | Diagnostic log write behavior |
+| `GitHubActionsDiagnosticTests.cs` | Diagnostic JSON/Markdown export |
+| `GitHubJobMatcherTests.cs` | Local runner ↔ GitHub job correlation |
+| `GitHubServiceTests.cs` | Auth/API behavior |
+| `RunnerControllerTests.cs` | Process control behavior |
+| `RunnerFolderAndLogServiceTests.cs` | Folder validation and log reading |
+| `RunnerManagerTests.cs` | Multi-runner profile and bulk behavior |
+| `RunnerSetupWizardTests.cs` | Setup validation and wizard support logic |
 | `ResourceMonitorTests.cs` | Process parsing, tree aggregation |
 | `RunnerLogParserTests.cs` | Log pattern matching, activity detection |
 
@@ -706,8 +861,12 @@ cd Avalonia && ./scripts/build.sh
 4. **Dark theme**: `#171717` background for tray menu
 5. **Factory pattern**: Every platform service created via factory interface
 6. **Process tree killing**: Stops entire runner process tree, not just parent
-7. **JSON preferences**: Platform-specific app data directories
-8. **Cross-platform battery**: Three different implementations (WMI, pmset, sysfs)
+7. **Multi-runner orchestration**: `RunnerManager` owns independent `RunnerInstanceStore` objects
+8. **GitHub Actions dashboard**: Remote runs/jobs are correlated with local runner state
+9. **Runner setup wizard**: GitHub registration token + local profile creation flow
+10. **Runner binary updates**: Downloads latest `actions/runner` package and preserves config files
+11. **JSON preferences**: Platform-specific app data directories
+12. **Cross-platform battery**: Three different implementations (WMI, pmset, sysfs)
 
 ---
 
@@ -722,6 +881,11 @@ cd Avalonia && ./scripts/build.sh
 | **Dependency Injection** | Manual wiring | `Microsoft.Extensions.DependencyInjection` |
 | **Localization** | Custom catalog (50+ langs) | Bilingual (en/hu) |
 | **Preferences** | `UserDefaults` | JSON file |
+| **Runner Profiles** | Single runner directory | Multiple persisted runner profiles |
+| **GitHub Auth** | Not implemented | Device flow, token import, multiple accounts |
+| **GitHub Actions Dashboard** | Not implemented | Runners, workflow runs, jobs, diagnostics |
+| **Runner Setup Wizard** | Not implemented | Repository/org runner setup |
+| **Runner Binary Updates** | Not implemented | `actions/runner` update service |
 | **Launch at Login** | `SMAppService` | LaunchAgents plist / Registry |
 | **External Dependencies** | None | Avalonia, CommunityToolkit, MS.Extensions |
 | **Build System** | SPM | dotnet CLI |
