@@ -23,6 +23,7 @@ on:
 permissions:
   contents: write
   actions: read
+  checks: write
 
 env:
   APP_NAME: GitRunnerManager
@@ -177,10 +178,20 @@ jobs:
         shell: bash
         run: swift test --package-path swfit --jobs 1
 
-      - name: Test Avalonia projects
+      - name: Run tests
         shell: bash
-        run: dotnet test src/GitRunnerManager.Tests/GitRunnerManager.Tests.csproj -c Release
-        working-directory: Avalonia
+        run: |
+          dotnet test Avalonia/GitRunnerManager.sln \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory TestResults
+
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Tests
+          path: TestResults/*.trx
+          reporter: dotnet-trx
 
   build-macos:
     name: Build macOS App
