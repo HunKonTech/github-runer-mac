@@ -147,11 +147,47 @@ jobs:
           echo 'runner=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
           echo "Linux Runner: ubuntu-latest"
 
+  test:
+    name: Run Tests
+    needs:
+      - pick-runners
+    runs-on: ${{ fromJSON(needs.pick-runners.outputs.mac_runner) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode 16 on GitHub-hosted macOS
+        if: ${{ !contains(needs.pick-runners.outputs.mac_runner, 'self-hosted') }}
+        shell: bash
+        run: |
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_16*.app' | sort -V | tail -n 1)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "Xcode 16 is not available on this runner image." >&2
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test Swift package
+        shell: bash
+        run: swift test --package-path swfit --jobs 1
+
+      - name: Test Avalonia projects
+        shell: bash
+        run: dotnet test src/GitRunnerManager.Tests/GitRunnerManager.Tests.csproj -c Release
+        working-directory: Avalonia
+
   build-macos:
     name: Build macOS App
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.mac_runner) }}
     steps:
       - uses: actions/checkout@v6
@@ -213,6 +249,7 @@ jobs:
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.mac_runner) }}
     steps:
       - uses: actions/checkout@v6
@@ -260,6 +297,7 @@ jobs:
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.windows_runner) }}
     steps:
       - uses: actions/checkout@v6
@@ -294,6 +332,7 @@ jobs:
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.windows_runner) }}
     steps:
       - uses: actions/checkout@v6
@@ -328,6 +367,7 @@ jobs:
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.linux_runner) }}
     steps:
       - uses: actions/checkout@v6
@@ -365,6 +405,7 @@ jobs:
     needs:
       - prepare
       - pick-runners
+      - test
     runs-on: ${{ fromJSON(needs.pick-runners.outputs.linux_runner) }}
     steps:
       - uses: actions/checkout@v6

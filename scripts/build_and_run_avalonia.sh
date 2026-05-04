@@ -14,6 +14,9 @@ cd "$AVALONIA_DIR"
 echo "Restoring packages..."
 dotnet restore
 
+echo "Running tests..."
+dotnet test src/GitRunnerManager.Tests/GitRunnerManager.Tests.csproj -c Release --no-restore
+
 echo "Building for macOS arm64..."
 rm -rf ./publish/macos
 dotnet publish src/GitRunnerManager.App/GitRunnerManager.App.csproj \

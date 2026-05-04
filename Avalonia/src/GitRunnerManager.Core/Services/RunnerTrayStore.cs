@@ -18,6 +18,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     private Timer? _refreshTimer;
     private bool _disposed;
     private readonly SemaphoreSlim _reconcileLock = new(1, 1);
+    private int _controlModeVersion;
 
     [ObservableProperty]
     private RunnerControlMode _controlMode = RunnerControlMode.Automatic;
@@ -282,16 +283,19 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
     {
         ControlMode = mode;
         _preferencesFactory.Create().ControlMode = mode;
+        Interlocked.Increment(ref _controlModeVersion);
         await ReconcileStateAsync(trigger);
     }
 
     private async Task RunManualActionAsync(RunnerControlMode mode, Func<Task> action)
     {
+        ControlMode = mode;
+        _preferencesFactory.Create().ControlMode = mode;
+        Interlocked.Increment(ref _controlModeVersion);
+
         await _reconcileLock.WaitAsync();
         try
         {
-            ControlMode = mode;
-            _preferencesFactory.Create().ControlMode = mode;
             await action();
             UpdateAggregateSnapshot();
             LastErrorMessage = Runners.Select(runner => runner.LastErrorMessage).FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
@@ -308,23 +312,28 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     private async Task ReconcileStateAsync(string trigger)
     {
+        var controlModeVersion = Volatile.Read(ref _controlModeVersion);
         await _reconcileLock.WaitAsync();
-        await ReconcileStateAfterLockAsync(trigger);
+        await ReconcileStateAfterLockAsync(trigger, controlModeVersion);
     }
 
     private async Task<bool> TryReconcileStateAsync(string trigger)
     {
+        var controlModeVersion = Volatile.Read(ref _controlModeVersion);
         if (!await _reconcileLock.WaitAsync(0))
             return false;
 
-        await ReconcileStateAfterLockAsync(trigger);
+        await ReconcileStateAfterLockAsync(trigger, controlModeVersion);
         return true;
     }
 
-    private async Task ReconcileStateAfterLockAsync(string trigger)
+    private async Task ReconcileStateAfterLockAsync(string trigger, int controlModeVersion)
     {
         try
         {
+            if (controlModeVersion != Volatile.Read(ref _controlModeVersion))
+                return;
+
             var networkSnapshot = NetworkSnapshot;
             var batterySnapshot = BatterySnapshot;
             var controlMode = ControlMode;

@@ -229,6 +229,48 @@ public class RunnerManagerTests
     }
 
     [Fact]
+    public async Task ForceStartAsync_SetsManualModeBeforeWaitingForAutomaticStop()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig
+                {
+                    Id = "one",
+                    DisplayName = "One",
+                    RunnerDirectory = "/tmp/one",
+                    StopOnMeteredNetwork = true
+                }
+            ]
+        };
+        var controllerFactory = new BlockingStopControllerFactory();
+        using var store = new RunnerTrayStore(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService(),
+            new FakeNetworkMonitor(),
+            new FakeBatteryMonitorFactory());
+        store.NetworkSnapshot = new NetworkConditionSnapshot
+        {
+            Kind = NetworkConditionKind.Expensive,
+            Description = "metered"
+        };
+
+        var refreshTask = store.RefreshNowAsync();
+        Assert.True(await controllerFactory.WaitForStopAsync(TimeSpan.FromSeconds(2)));
+
+        var startTask = store.ForceStartAsync();
+
+        Assert.Equal(RunnerControlMode.ForceRunning, store.ControlMode);
+        Assert.Equal(RunnerControlMode.ForceRunning, prefs.ControlMode);
+
+        controllerFactory.ReleaseStop();
+        await Task.WhenAll(refreshTask, startTask);
+    }
+
+    [Fact]
     public async Task RefreshAll_DefersAutomaticStopWhileJobIsActive()
     {
         var prefs = new InMemoryPreferencesStore
@@ -258,6 +300,33 @@ public class RunnerManagerTests
 
         Assert.Equal(0, controllerFactory.Controller.StopCount);
         Assert.True(controllerFactory.Controller.IsRunning);
+    }
+
+    [Fact]
+    public void Runners_ReturnsStableSnapshotWhenProfilesReload()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig { Id = "one", DisplayName = "One", RunnerDirectory = "/tmp/one" }
+            ]
+        };
+        var manager = new RunnerManager(
+            new FakeControllerFactory(),
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService());
+        var runners = manager.Runners;
+
+        prefs.RunnerProfiles =
+        [
+            new RunnerConfig { Id = "two", DisplayName = "Two", RunnerDirectory = "/tmp/two" }
+        ];
+        manager.ReloadProfiles();
+
+        Assert.Equal("one", Assert.Single(runners).Profile.Id);
+        Assert.Equal("two", Assert.Single(manager.Runners).Profile.Id);
     }
 }
 
@@ -523,5 +592,55 @@ internal sealed class BlockingStartController(TaskCompletionSource startStarted,
     public void Dispose()
     {
         release.TrySetResult();
+    }
+}
+
+internal sealed class BlockingStopControllerFactory : IRunnerControllerFactory
+{
+    private readonly TaskCompletionSource _stopStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _releaseStop = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public IRunnerController Create(DirectoryInfo runnerDirectory)
+    {
+        return new BlockingStopController(_stopStarted, _releaseStop);
+    }
+
+    public async Task<bool> WaitForStopAsync(TimeSpan timeout)
+    {
+        var completed = await Task.WhenAny(_stopStarted.Task, Task.Delay(timeout));
+        return completed == _stopStarted.Task;
+    }
+
+    public void ReleaseStop()
+    {
+        _releaseStop.TrySetResult();
+    }
+}
+
+internal sealed class BlockingStopController(TaskCompletionSource stopStarted, TaskCompletionSource releaseStop) : IRunnerController
+{
+    private bool _isRunning = true;
+
+    public RunnerSnapshot GetCurrentSnapshot()
+    {
+        return new RunnerSnapshot { IsRunning = _isRunning, Activity = RunnerActivitySnapshot.Unknown };
+    }
+
+    public Task StartAsync()
+    {
+        _isRunning = true;
+        return Task.CompletedTask;
+    }
+
+    public async Task StopAsync()
+    {
+        stopStarted.TrySetResult();
+        await releaseStop.Task;
+        _isRunning = false;
+    }
+
+    public void Dispose()
+    {
+        releaseStop.TrySetResult();
     }
 }

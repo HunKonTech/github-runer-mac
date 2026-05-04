@@ -12,6 +12,7 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
     private readonly IPreferencesStoreFactory _preferencesFactory;
     private readonly ILocalizationService _localization;
     private readonly List<RunnerInstanceStore> _runners = [];
+    private readonly object _runnersLock = new();
 
     public RunnerManager(
         IRunnerControllerFactory controllerFactory,
@@ -26,23 +27,19 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
         ReloadProfiles();
     }
 
-    public IReadOnlyList<RunnerInstanceStore> Runners => _runners;
+    public IReadOnlyList<RunnerInstanceStore> Runners => GetRunnersSnapshot();
 
     public RunnerInstanceStore? GetRunner(string runnerId)
     {
-        return _runners.FirstOrDefault(runner => runner.Profile.Id == runnerId);
+        lock (_runnersLock)
+        {
+            return _runners.FirstOrDefault(runner => runner.Profile.Id == runnerId);
+        }
     }
 
     public void ReloadProfiles()
     {
-        foreach (var runner in _runners)
-        {
-            runner.PropertyChanged -= OnRunnerPropertyChanged;
-            runner.Dispose();
-        }
-
-        _runners.Clear();
-        foreach (var profile in _preferencesFactory.Create().RunnerProfiles)
+        var newRunners = _preferencesFactory.Create().RunnerProfiles.Select(profile =>
         {
             var directory = new DirectoryInfo(profile.RunnerDirectory);
             var runner = new RunnerInstanceStore(
@@ -51,7 +48,21 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
                 _resourceMonitorFactory.Create(directory),
                 _localization);
             runner.PropertyChanged += OnRunnerPropertyChanged;
-            _runners.Add(runner);
+            return runner;
+        }).ToList();
+
+        List<RunnerInstanceStore> oldRunners;
+        lock (_runnersLock)
+        {
+            oldRunners = [.. _runners];
+            _runners.Clear();
+            _runners.AddRange(newRunners);
+        }
+
+        foreach (var runner in oldRunners)
+        {
+            runner.PropertyChanged -= OnRunnerPropertyChanged;
+            runner.Dispose();
         }
 
         OnPropertyChanged(nameof(Runners));
@@ -77,7 +88,7 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
             profile.Id = Guid.NewGuid().ToString("N");
 
         if (string.IsNullOrWhiteSpace(profile.DisplayName))
-            profile.DisplayName = $"Runner {_runners.Count + 1}";
+            profile.DisplayName = $"Runner {Runners.Count + 1}";
 
         var prefs = _preferencesFactory.Create();
         var profiles = prefs.RunnerProfiles;
@@ -99,19 +110,19 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
         BatterySnapshot battery,
         RunnerControlMode controlMode)
     {
-        await Task.WhenAll(_runners.Select(runner => runner.ReconcileAsync(network, battery, controlMode)));
+        await Task.WhenAll(GetRunnersSnapshot().Select(runner => runner.ReconcileAsync(network, battery, controlMode)));
     }
 
     public async Task StartAllAsync()
     {
-        await Task.WhenAll(_runners
+        await Task.WhenAll(GetRunnersSnapshot()
             .Where(runner => runner.Profile.IsEnabled)
             .Select(runner => runner.StartAsync()));
     }
 
     public async Task StopAllAsync()
     {
-        await Task.WhenAll(_runners.Select(runner => runner.StopAsync()));
+        await Task.WhenAll(GetRunnersSnapshot().Select(runner => runner.StopAsync()));
     }
 
     private void OnRunnerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -121,12 +132,25 @@ public partial class RunnerManager : ObservableObject, IRunnerManager
 
     public void Dispose()
     {
-        foreach (var runner in _runners)
+        List<RunnerInstanceStore> runners;
+        lock (_runnersLock)
+        {
+            runners = [.. _runners];
+            _runners.Clear();
+        }
+
+        foreach (var runner in runners)
         {
             runner.PropertyChanged -= OnRunnerPropertyChanged;
             runner.Dispose();
         }
+    }
 
-        _runners.Clear();
+    private List<RunnerInstanceStore> GetRunnersSnapshot()
+    {
+        lock (_runnersLock)
+        {
+            return [.. _runners];
+        }
     }
 }

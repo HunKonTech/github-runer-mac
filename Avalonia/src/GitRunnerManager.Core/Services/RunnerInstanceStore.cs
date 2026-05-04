@@ -249,6 +249,5 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
         _disposed = true;
         _resourceMonitor.Stop();
         _controller.Dispose();
-        _lock.Dispose();
     }
 }

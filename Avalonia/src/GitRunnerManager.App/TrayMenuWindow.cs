@@ -199,9 +199,10 @@ public sealed class TrayMenuWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top
         };
+        var shouldStart = ShouldUseStartAction();
         actions.Children.Add(ActionButton(
-            _store.RunnerSnapshot.IsRunning ? LocalizationKeys.ButtonStop : LocalizationKeys.ButtonStart,
-            _store.RunnerSnapshot.IsRunning ? _stopRunner : _startRunner,
+            shouldStart ? LocalizationKeys.ButtonStart : LocalizationKeys.ButtonStop,
+            shouldStart ? _startRunner : _stopRunner,
             true));
         actions.Children.Add(ActionButton(LocalizationKeys.ButtonAutomaticMode, _automaticMode));
         panel.Children.Add(actions);
@@ -351,6 +352,16 @@ public sealed class TrayMenuWindow : Window
         };
 
         return checkbox;
+    }
+
+    private bool ShouldUseStartAction()
+    {
+        if (_store.ControlMode == RunnerControlMode.Automatic &&
+            _store.NetworkSnapshot.Kind == NetworkConditionKind.Expensive &&
+            _store.StopRunnerOnMeteredNetwork)
+            return true;
+
+        return !_store.RunnerSnapshot.IsRunning;
     }
 
     private Control StatusRow(string titleKey, string value, IBrush color)
