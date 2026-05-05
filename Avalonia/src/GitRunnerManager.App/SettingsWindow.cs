@@ -455,11 +455,21 @@ public sealed class SettingsWindow : Window
         if (_selectedRunnerId == null)
             return;
 
+        var runner = _store?.GetRunner(_selectedRunnerId);
+        var runnerDirectory = runner?.Profile.RunnerDirectory;
+        var deleteFolder = new CheckBox
+        {
+            Content = T(LocalizationKeys.RunnerRemoveFolderToggle),
+            FontSize = 13,
+            Foreground = PrimaryTextBrush,
+            IsEnabled = !string.IsNullOrWhiteSpace(runnerDirectory) && Directory.Exists(runnerDirectory)
+        };
+
         var dialog = new Window
         {
             Title = T(LocalizationKeys.RunnerRemoveTitle),
             Width = 420,
-            Height = 180,
+            Height = 245,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = WindowBrush,
             Content = new StackPanel
@@ -469,12 +479,14 @@ public sealed class SettingsWindow : Window
                 Children =
                 {
                     SecondaryText(T(LocalizationKeys.RunnerRemoveConfirmation)),
+                    deleteFolder,
+                    SecondaryText(T(LocalizationKeys.RunnerRemoveFolderWarning, runnerDirectory ?? "-")),
                     ButtonRow()
                 }
             }
         };
 
-        var buttons = (StackPanel)((StackPanel)dialog.Content!).Children[1];
+        var buttons = (StackPanel)((StackPanel)dialog.Content!).Children[3];
         buttons.Children.Add(Button(LocalizationKeys.ButtonCancel, () => dialog.Close(false)));
         buttons.Children.Add(Button(LocalizationKeys.ButtonRemoveProfile, () => dialog.Close(true)));
         var confirmed = await dialog.ShowDialog<bool>(this);
@@ -482,8 +494,24 @@ public sealed class SettingsWindow : Window
             return;
 
         _store?.RemoveRunnerProfile(_selectedRunnerId);
+        if (deleteFolder.IsChecked == true && !string.IsNullOrWhiteSpace(runnerDirectory))
+            DeleteRunnerFolder(runnerDirectory);
+
         _selectedRunnerId = _store?.Runners.FirstOrDefault()?.Profile.Id;
         BuildSelectedPage();
+    }
+
+    private void DeleteRunnerFolder(string runnerDirectory)
+    {
+        try
+        {
+            if (Directory.Exists(runnerDirectory))
+                Directory.Delete(runnerDirectory, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            _runnerUpdateStatus = T(LocalizationKeys.RunnerRemoveFolderError, ex.Message);
+        }
     }
 
     private void SaveProfile(RunnerConfig profile)

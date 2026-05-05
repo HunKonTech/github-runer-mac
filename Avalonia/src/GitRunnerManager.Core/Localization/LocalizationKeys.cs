@@ -138,6 +138,9 @@ public static class LocalizationKeys
     public const string RunnerUpdateVersionSummary = "runnerUpdateVersionSummary";
     public const string RunnerRemoveTitle = "runnerRemoveTitle";
     public const string RunnerRemoveConfirmation = "runnerRemoveConfirmation";
+    public const string RunnerRemoveFolderToggle = "runnerRemoveFolderToggle";
+    public const string RunnerRemoveFolderWarning = "runnerRemoveFolderWarning";
+    public const string RunnerRemoveFolderError = "runnerRemoveFolderError";
     public const string RunnerStatusTitle = "runnerStatusTitle";
     public const string RunnerResourcesTitle = "runnerResourcesTitle";
     public const string RunnerDisplayNameTitle = "runnerDisplayNameTitle";
