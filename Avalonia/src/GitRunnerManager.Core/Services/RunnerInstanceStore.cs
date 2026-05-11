@@ -59,7 +59,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
         try
         {
-            await _lock.WaitAsync();
+            await _lock.WaitAsync().ConfigureAwait(false);
         }
         catch (ObjectDisposedException)
         {
@@ -72,7 +72,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
                 return;
 
             RefreshSnapshot();
-            await ApplyDesiredStateAsync(network, battery, globalControlMode);
+            await ApplyDesiredStateAsync(network, battery, globalControlMode).ConfigureAwait(false);
             RefreshSnapshot();
             LastErrorMessage = null;
         }
@@ -88,12 +88,12 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
     public async Task StartAsync()
     {
-        await RunActionAsync(_controller.StartAsync, PendingSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting));
+        await RunActionAsync(_controller.StartAsync, PendingSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting)).ConfigureAwait(false);
     }
 
     public async Task StopAsync()
     {
-        await RunActionAsync(_controller.StopAsync, PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping));
+        await RunActionAsync(_controller.StopAsync, PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping)).ConfigureAwait(false);
     }
 
     public async Task RestartAsync()
@@ -101,10 +101,10 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
         await RunActionAsync(async () =>
         {
             RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping);
-            await _controller.StopAsync();
+            await _controller.StopAsync().ConfigureAwait(false);
             RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting);
-            await _controller.StartAsync();
-        }, PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping));
+            await _controller.StartAsync().ConfigureAwait(false);
+        }, PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping)).ConfigureAwait(false);
     }
 
     public void RefreshSnapshot()
@@ -137,7 +137,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
     {
         if (!Profile.IsEnabled)
         {
-            await _controller.StopAsync();
+            await _controller.StopAsync().ConfigureAwait(false);
             return;
         }
 
@@ -145,11 +145,11 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
         {
             case RunnerControlMode.ForceRunning:
                 RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting);
-                await _controller.StartAsync();
+                await _controller.StartAsync().ConfigureAwait(false);
                 return;
             case RunnerControlMode.ForceStopped:
                 RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping);
-                await _controller.StopAsync();
+                await _controller.StopAsync().ConfigureAwait(false);
                 return;
         }
 
@@ -159,7 +159,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
                 return;
 
             RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping);
-            await _controller.StopAsync();
+            await _controller.StopAsync().ConfigureAwait(false);
             return;
         }
 
@@ -177,14 +177,14 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
         {
             case NetworkDecision.Run:
                 RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting);
-                await _controller.StartAsync();
+                await _controller.StartAsync().ConfigureAwait(false);
                 break;
             case NetworkDecision.Stop:
                 if (IsActiveJobRunning)
                     return;
 
                 RunnerSnapshot = PendingSnapshot(true, RunnerActivityKind.Stopping, LocalizationKeys.ActivityStopping);
-                await _controller.StopAsync();
+                await _controller.StopAsync().ConfigureAwait(false);
                 break;
         }
     }
@@ -213,7 +213,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
         try
         {
-            await _lock.WaitAsync();
+            await _lock.WaitAsync().ConfigureAwait(false);
         }
         catch (ObjectDisposedException)
         {
@@ -227,7 +227,7 @@ public partial class RunnerInstanceStore : ObservableObject, IDisposable
 
             RunnerSnapshot = pendingSnapshot;
             LastErrorMessage = null;
-            await action();
+            await action().ConfigureAwait(false);
             RefreshSnapshot();
             LastErrorMessage = null;
         }

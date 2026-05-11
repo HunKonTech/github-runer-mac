@@ -2,6 +2,7 @@ using GitRunnerManager.Core.Interfaces;
 using GitRunnerManager.Core.Localization;
 using GitRunnerManager.Core.Models;
 using GitRunnerManager.Core.Services;
+using GitRunnerManager.Platform.Services;
 using System.Diagnostics;
 using Xunit;
 
@@ -265,9 +266,55 @@ public class RunnerManagerTests
 
         Assert.Equal(RunnerControlMode.ForceRunning, store.ControlMode);
         Assert.Equal(RunnerControlMode.ForceRunning, prefs.ControlMode);
+        Assert.Equal(RunnerActivityKind.Starting, store.RunnerSnapshot.Activity.Kind);
 
         controllerFactory.ReleaseStop();
         await Task.WhenAll(refreshTask, startTask);
+    }
+
+    [Fact]
+    public async Task StartRunnerAsync_DoesNotResumeRefreshOnCapturedUiContext()
+    {
+        var prefs = new InMemoryPreferencesStore
+        {
+            RunnerProfiles =
+            [
+                new RunnerConfig
+                {
+                    Id = "one",
+                    DisplayName = "One",
+                    RunnerDirectory = "/tmp/one"
+                }
+            ]
+        };
+        var controllerFactory = new BlockingStartControllerFactory();
+        using var store = new RunnerTrayStore(
+            controllerFactory,
+            new FakeResourceMonitorFactory(),
+            new FakePreferencesStoreFactory(prefs),
+            new LocalizationService(),
+            new FakeNetworkMonitor(),
+            new FakeBatteryMonitorFactory());
+
+        var previousContext = SynchronizationContext.Current;
+        var nonPumpingContext = new NonPumpingSynchronizationContext();
+        Task startTask;
+        SynchronizationContext.SetSynchronizationContext(nonPumpingContext);
+        try
+        {
+            startTask = store.StartRunnerAsync("one");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        Assert.True(await controllerFactory.WaitForStartAsync(TimeSpan.FromSeconds(2)));
+
+        controllerFactory.Release();
+        var completed = await Task.WhenAny(startTask, Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.Same(startTask, completed);
     }
 
     [Fact]
@@ -327,6 +374,23 @@ public class RunnerManagerTests
 
         Assert.Equal("one", Assert.Single(runners).Profile.Id);
         Assert.Equal("two", Assert.Single(manager.Runners).Profile.Id);
+    }
+
+    [Fact]
+    public void ParseUnixRunnerProcessIds_MatchesRunnerProcessesFromSingleSnapshot()
+    {
+        const string runnerDirectory = "/tmp/actions-runner";
+        var output = """
+            101 bash /bin/bash /tmp/actions-runner/run.sh
+            102 Runner.Listener /tmp/actions-runner/bin/Runner.Listener run
+            103 Runner.Worker /tmp/actions-runner/bin/Runner.Worker spawnclient 102
+            104 Runner.Listener /tmp/other-runner/bin/Runner.Listener run
+            105 sleep sleep 10
+            """;
+
+        var pids = RunnerController.ParseUnixRunnerProcessIds(output, runnerDirectory);
+
+        Assert.Equal([101, 102, 103], pids);
     }
 }
 
@@ -642,5 +706,12 @@ internal sealed class BlockingStopController(TaskCompletionSource stopStarted, T
     public void Dispose()
     {
         releaseStop.TrySetResult();
+    }
+}
+
+internal sealed class NonPumpingSynchronizationContext : SynchronizationContext
+{
+    public override void Post(SendOrPostCallback d, object? state)
+    {
     }
 }

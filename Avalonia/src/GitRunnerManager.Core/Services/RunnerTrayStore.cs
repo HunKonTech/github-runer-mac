@@ -163,7 +163,7 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     private void OnRefreshTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        _ = ReconcileStateAsync("periodic refresh");
+        _ = TryReconcileStateAsync("periodic refresh");
     }
 
     public void RefreshNow()
@@ -198,7 +198,10 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     public Task ForceStartAsync()
     {
-        return RunManualActionAsync(RunnerControlMode.ForceRunning, () => _runnerManager.StartAllAsync());
+        return RunManualActionAsync(
+            RunnerControlMode.ForceRunning,
+            () => _runnerManager.StartAllAsync(),
+            CreateRunnerSnapshot(true, RunnerActivityKind.Starting, LocalizationKeys.ActivityWaitingOrStarting));
     }
 
     public void ForceStop()
@@ -208,7 +211,10 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
 
     public Task ForceStopAsync()
     {
-        return RunManualActionAsync(RunnerControlMode.ForceStopped, () => _runnerManager.StopAllAsync());
+        return RunManualActionAsync(
+            RunnerControlMode.ForceStopped,
+            () => _runnerManager.StopAllAsync(),
+            CreateRunnerSnapshot(false, RunnerActivityKind.Unknown, LocalizationKeys.ActivityRunnerStopped));
     }
 
     public async Task StartAllAsync()
@@ -287,11 +293,16 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         await ReconcileStateAsync(trigger);
     }
 
-    private async Task RunManualActionAsync(RunnerControlMode mode, Func<Task> action)
+    private async Task RunManualActionAsync(RunnerControlMode mode, Func<Task> action, RunnerSnapshot? optimisticSnapshot = null)
     {
         ControlMode = mode;
         _preferencesFactory.Create().ControlMode = mode;
         Interlocked.Increment(ref _controlModeVersion);
+        if (optimisticSnapshot != null)
+        {
+            RunnerSnapshot = optimisticSnapshot;
+            LastRefreshTime = DateTime.Now;
+        }
 
         await _reconcileLock.WaitAsync();
         try
@@ -339,6 +350,9 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
             var controlMode = ControlMode;
 
             await Task.Run(() => _runnerManager.RefreshAllAsync(networkSnapshot, batterySnapshot, controlMode));
+            if (controlModeVersion != Volatile.Read(ref _controlModeVersion))
+                return;
+
             UpdateAggregateSnapshot();
             LastErrorMessage = Runners.Select(runner => runner.LastErrorMessage).FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
         }
@@ -375,6 +389,19 @@ public partial class RunnerTrayStore : ObservableObject, IDisposable
         LastRefreshTime = snapshots.Select(snapshot => snapshot.LastRefreshTime).Where(value => value.HasValue).DefaultIfEmpty().Max();
         if (runnersChanged)
             OnPropertyChanged(nameof(Runners));
+    }
+
+    private RunnerSnapshot CreateRunnerSnapshot(bool isRunning, RunnerActivityKind kind, string descriptionKey)
+    {
+        return new RunnerSnapshot
+        {
+            IsRunning = isRunning,
+            Activity = new RunnerActivitySnapshot
+            {
+                Kind = kind,
+                Description = _localization.Get(descriptionKey)
+            }
+        };
     }
 
     public string PolicySummary => ControlMode switch

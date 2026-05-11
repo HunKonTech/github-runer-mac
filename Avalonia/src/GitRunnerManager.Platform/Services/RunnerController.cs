@@ -39,8 +39,13 @@ public class RunnerController : IRunnerController
 
     public Task StartAsync()
     {
+        return Task.Run(StartCore);
+    }
+
+    private void StartCore()
+    {
         if (IsRunnerRunning())
-            return Task.CompletedTask;
+            return;
 
         var runScript = GetRunScript();
         if (runScript == null || !File.Exists(runScript))
@@ -73,11 +78,14 @@ public class RunnerController : IRunnerController
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
         }
-
-        return Task.CompletedTask;
     }
 
     public Task StopAsync()
+    {
+        return Task.Run(StopCore);
+    }
+
+    private void StopCore()
     {
         if (_managedProcess != null && !_managedProcess.HasExited)
         {
@@ -98,8 +106,6 @@ public class RunnerController : IRunnerController
             }
             catch { }
         }
-
-        return Task.CompletedTask;
     }
 
     private string? GetRunScript()
@@ -158,6 +164,9 @@ public class RunnerController : IRunnerController
 
     private List<int> GetRunnerProcessIds()
     {
+        if (!OperatingSystem.IsWindows())
+            return GetUnixRunnerProcessIds();
+
         var pids = new List<int>();
 
         try
@@ -185,32 +194,106 @@ public class RunnerController : IRunnerController
         return pids;
     }
 
+    private List<int> GetUnixRunnerProcessIds()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "/bin/ps",
+                Arguments = "-axo pid=,comm=,args=",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+
+            if (process == null)
+                return [];
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(2000))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch { }
+
+                return [];
+            }
+
+            var output = outputTask.GetAwaiter().GetResult();
+            if (process.ExitCode != 0)
+                return [];
+
+            return ParseUnixRunnerProcessIds(output, _runnerDirectory.FullName);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    internal static List<int> ParseUnixRunnerProcessIds(string output, string runnerDirectory)
+    {
+        var pids = new List<int>();
+
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 3)
+                continue;
+
+            if (!int.TryParse(fields[0], out var pid))
+                continue;
+
+            if (MatchesRunnerProcess(fields[1], fields[2], runnerDirectory))
+                pids.Add(pid);
+        }
+
+        return pids;
+    }
+
     private bool MatchesRunnerProcess(Process proc)
     {
         try
         {
-            var cmd = proc.ProcessName;
-            var path = _runnerDirectory.FullName;
             var commandLine = GetCommandLine(proc);
-            if (string.IsNullOrWhiteSpace(commandLine)
-                || !commandLine.Contains(path, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (cmd == "run" || cmd == "run.sh" || cmd == "run.cmd" || cmd == "run.bat")
-                return true;
-
-            if (cmd == "Runner.Listener" || cmd == "Runner.Worker")
-                return true;
-
-            if (cmd == "run-helper" || cmd == "RunnerService")
-                return true;
-
-            return false;
+            return MatchesRunnerProcess(proc.ProcessName, commandLine, _runnerDirectory.FullName);
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool MatchesRunnerProcess(string processName, string? commandLine, string runnerDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)
+            || !commandLine.Contains(runnerDirectory, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var executableName = Path.GetFileName(processName);
+        if (string.Equals(executableName, "run", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "run.sh", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "run.cmd", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "run.bat", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (string.Equals(executableName, "Runner.Listener", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "Runner.Listener.exe", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "Runner.Worker", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "Runner.Worker.exe", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "run-helper", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(executableName, "RunnerService", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return commandLine.Contains("run.sh", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("run.cmd", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("run.bat", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("Runner.Listener", StringComparison.OrdinalIgnoreCase)
+            || commandLine.Contains("Runner.Worker", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? GetCommandLine(Process proc)
